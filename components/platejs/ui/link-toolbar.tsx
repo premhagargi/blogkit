@@ -165,11 +165,11 @@ export function LinkFloatingToolbar({
 
   return (
     <>
-      <div ref={insertRef} className={popoverVariants()} {...insertProps}>
+      <div ref={insertRef} className={popoverVariants()} {...(insertProps as any)}>
         {input}
       </div>
 
-      <div ref={editRef} className={popoverVariants()} {...editProps}>
+      <div ref={editRef} className={popoverVariants()} {...(editProps as any)}>
         {editContent}
       </div>
     </>
@@ -200,13 +200,13 @@ function NofollowCheckbox({
     const entry = editor.api.node<TLinkElement>({
       match: { type: editor.getType(KEYS.link) },
     });
-    
+
     if (entry) {
       const [element, path] = entry;
       // Read url and rel directly from the element (not from getLinkAttributes)
       const url = typeof (element as any).url === 'string' ? (element as any).url : '';
       const rel = typeof (element as any).rel === 'string' ? (element as any).rel : '';
-      
+
       // Only update state if this is a different link (to preserve state when creating new links)
       // or if we're editing an existing link
       if (url !== previousLinkRef.current || editState.isEditing) {
@@ -239,19 +239,19 @@ function NofollowCheckbox({
       const entry = editor.api.node<TLinkElement>({
         match: { type: editor.getType(KEYS.link) },
       });
-      
+
       if (entry) {
         const [element, path] = entry;
         // Read url and rel directly from the element
         const url = typeof (element as any).url === 'string' ? (element as any).url : '';
         const rel = typeof (element as any).rel === 'string' ? (element as any).rel : '';
-        
+
         // Only add nofollow if it doesn't already have it
         // And only if this is a newly created link (url not in previousLinkRef) or we're in insert mode
         if (!rel.includes('nofollow')) {
           // Check if this is a new link or if we're actively inserting
           const isNewLink = url !== previousLinkRef.current || insertState.isOpen;
-          
+
           if (isNewLink && url) {
             const relParts = rel.split(' ').filter(Boolean);
             relParts.push('nofollow');
@@ -289,7 +289,7 @@ function NofollowCheckbox({
         const url = typeof (element as any).url === 'string' ? (element as any).url : '';
         const currentRel = typeof (element as any).rel === 'string' ? (element as any).rel : '';
         const relParts = currentRel.split(' ').filter(Boolean);
-        
+
         if (checked) {
           // Add nofollow if not already present
           if (!relParts.includes('nofollow')) {
@@ -301,10 +301,10 @@ function NofollowCheckbox({
           relParts.length = 0;
           relParts.push(...filtered);
         }
-        
+
         const newRel = relParts.length > 0 ? relParts.join(' ') : undefined;
         editor.tf.setNodes({ rel: newRel }, { at: path });
-        
+
         // Update the previous link ref to prevent state reset
         previousLinkRef.current = url;
       }
