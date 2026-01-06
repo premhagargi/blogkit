@@ -1,0 +1,531 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id              String                @id @default(cuid())
+  name            String?
+  email           String                @unique
+  emailVerified   DateTime?
+  image           String?
+  password        String?
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+  accounts        Account[]
+  createdPages    Page[]                @relation("CreatedPages")
+  updatedPages    Page[]                @relation("UpdatedPages")
+  pageAuthorships PageAuthor[]
+  sessions        Session[]
+  memberships     WorkspaceMember[]
+  sentInvitations WorkspaceInvitation[]
+  notifications   Notification[]
+}
+
+model Account {
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([provider, providerAccountId])
+}
+
+model Session {
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@id([identifier, token])
+}
+
+model Workspace {
+  id            String                @id @default(cuid())
+  name          String
+  slug          String                @unique
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+  authors       Author[]
+  pages         Page[]
+  blogPosts     BlogPost[]
+  config        WorkspaceConfig?
+  domain        WorkspaceDomain?
+  members       WorkspaceMember[]
+  categories    Category[]
+  tags          Tag[]
+  invitations   WorkspaceInvitation[]
+  notifications Notification[]
+
+  // ✅ ADD THIS LINE - Missing opposite relation field
+  formSubmissions FormSubmission[]
+}
+
+model WorkspaceDomain {
+  id                String     @id @default(cuid())
+  workspaceId       String     @unique
+  domain            String     @unique
+  domainType        DomainType
+  isVerified        Boolean    @default(false)
+  verificationToken String?
+  lastVerifiedAt    DateTime?
+  cnameTarget       String?
+  aRecords          String[]
+  txtRecords        String[]
+  sslStatus         SslStatus  @default(PENDING)
+  sslIssuedAt       DateTime?
+  sslExpiresAt      DateTime?
+  cdnEndpoint       String?
+  cdnStatus         CdnStatus  @default(PENDING)
+  setupStep         SetupStep  @default(DNS_PENDING)
+  setupInstructions Json?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  workspace         Workspace  @relation(fields: [workspaceId], references: [id])
+}
+
+model WorkspaceMember {
+  id          String    @id @default(cuid())
+  role        Role
+  userId      String
+  workspaceId String
+  createdAt   DateTime  @default(now())
+  user        User      @relation(fields: [userId], references: [id])
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+
+  @@unique([userId, workspaceId])
+}
+
+model WorkspaceConfig {
+  id                 String     @id @default(cuid())
+  workspaceId        String     @unique
+  enabledPageTypes   PageType[]
+  blogCategories     Json
+  helpdeskCategories String[]
+  customFields       Json?
+  primaryColor       String?
+  logo               String?
+  customDomain       String?
+  blogTags           Json?
+  workspace          Workspace  @relation(fields: [workspaceId], references: [id])
+}
+
+// BLOG PAGE
+
+model Page {
+  id             String     @id @default(cuid())
+  title          String
+  slug           String
+  type           PageType
+  description    String?
+  content        Json
+  status         PageStatus @default(DRAFT)
+  featuredImage  String?
+  seoTitle       String?
+  seoDescription String?
+  readTime       Int?
+  category       String?
+  publishedAt    DateTime?
+  workspaceId    String
+  createdById    String
+  updatedById    String?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  //  FORMS CONFIGURATION
+  formsConfig         Json? // Array of all forms for this page
+  categoryFormMapping Json? // { "Tech": "form-123", "Marketing": "form-456" }
+  globalDefaultFormId String? // Fallback form ID if no category match
+
+  //  CTA CONFIGURATION 
+  ctasConfig         Json? // Array of all CTAs for this page
+  categoryCtaMapping Json? // { "Tech": "cta-123", "Marketing": "cta-456" }
+  globalDefaultCtaId String? // Fallback CTA ID if no category match
+
+  // ... existing relations ...
+  blogPosts       BlogPost[]
+  changelogEntry  ChangelogEntry?
+  helpdeskArticle HelpdeskArticle?
+  createdBy       User             @relation("CreatedPages", fields: [createdById], references: [id])
+  updatedBy       User?            @relation("UpdatedPages", fields: [updatedById], references: [id])
+  workspace       Workspace        @relation(fields: [workspaceId], references: [id])
+  authors         PageAuthor[]
+  pageAuthors     Author[]         @relation("AuthorToPage")
+  categories      Category[]
+  tags            Tag[]
+
+  //  ADD THIS LINE - Missing opposite relation field
+  formSubmissions FormSubmission[]
+
+  @@unique([slug, workspaceId])
+}
+
+model Author {
+  id          String     @id @default(cuid())
+  name        String
+  bio         String?
+  image       String?
+  email       String?
+  website     String?
+  socialLinks Json?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  workspaceId String
+  workspace   Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  pages       Page[]     @relation("AuthorToPage")
+  blogPosts   BlogPost[]
+
+  @@unique([name, workspaceId])
+}
+
+model PageAuthor {
+  id     String @id @default(cuid())
+  pageId String
+  userId String
+  page   Page   @relation(fields: [pageId], references: [id])
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@unique([pageId, userId])
+}
+
+model BlogPost {
+  id String @id @default(cuid())
+
+  // Core Content
+  title        String
+  slug         String
+  content      Json // PlateJS content
+  htmlContent  String? // Rendered HTML for faster display
+  excerpt      String? // Short summary
+  mdx          String?
+  // Publishing
+  status       PostStatus @default(DRAFT)
+  publishedAt  DateTime?
+  scheduledFor DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  // SEO
+  metaTitle       String?
+  metaDescription String?
+  canonicalUrl    String?
+
+  // Media
+  featuredImage    String?
+  featuredImageAlt String?
+  gallery          String[] // Additional images
+
+  // Page
+  featuredInCategories String[]
+  featuredOrder        Int?
+
+  featuredCategoryOrders Json?
+  featured               Boolean @default(false)
+  pinned                 Boolean @default(false)
+
+  // Analytics
+  views    Int  @default(0)
+  readTime Int? // Estimated read time in minutes
+
+  // Author & Workspace Relations
+  authorId    String?
+  coAuthorIds String[]
+  workspaceId String
+
+  pageId            String
+  estimatedReadTime Int?
+  authorBio         String?
+
+  // Relations
+  page       Page       @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  author     Author?    @relation(fields: [authorId], references: [id])
+  workspace  Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  categories Category[] @relation("PostCategories")
+  tags       Tag[]      @relation("PostTags")
+
+  //  ADD THIS LINE - Missing opposite relation field
+  formSubmissions FormSubmission[]
+
+  //FORM CONFIGURATION - Keep only selectedFormId
+  selectedFormId String? // Override: use specific form ID
+  formEnabled    Boolean @default(true) // Enable/disable form for this post
+
+  // CTA CONFIGURATION 
+  selectedCtaId String? // Override: use specific CTA ID
+  ctaEnabled    Boolean @default(true) // Enable/disable CTA for this post
+
+  @@unique([slug, workspaceId])
+  // Core indexes
+  @@index([status, publishedAt])
+  @@index([workspaceId, status])
+  @@index([authorId])
+  @@index([pageId])
+  // Performance indexes for table filtering & sorting
+  @@index([pageId, workspaceId, status])
+  @@index([pageId, workspaceId, createdAt])
+  @@index([pageId, workspaceId, updatedAt])
+  @@index([pageId, workspaceId, publishedAt])
+  @@index([pageId, pinned, createdAt])
+  @@index([title]) // For search operations
+}
+
+model HelpdeskArticle {
+  id              String     @id @default(cuid())
+  pageId          String     @unique
+  category        String
+  priority        Priority
+  difficulty      Difficulty
+  relatedArticles String[]
+  page            Page       @relation(fields: [pageId], references: [id])
+}
+
+model ChangelogEntry {
+  id          String       @id @default(cuid())
+  pageId      String       @unique
+  version     String
+  releaseDate DateTime
+  changeType  ChangeType[]
+  breaking    Boolean      @default(false)
+  page        Page         @relation(fields: [pageId], references: [id])
+}
+
+model WorkspaceInvitation {
+  id          String           @id @default(cuid())
+  email       String
+  role        Role
+  status      InvitationStatus @default(PENDING)
+  token       String           @unique
+  workspaceId String
+  invitedById String
+  expiresAt   DateTime
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  invitedBy User      @relation(fields: [invitedById], references: [id])
+
+  @@unique([email, workspaceId])
+  @@index([token])
+  @@index([email])
+}
+
+model Notification {
+  id          String           @id @default(cuid())
+  type        NotificationType
+  title       String
+  message     String
+  data        Json? // Additional data like workspace info, invitation details, etc.
+  read        Boolean          @default(false)
+  userId      String
+  workspaceId String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read])
+  @@index([createdAt])
+}
+
+enum DomainType {
+  SUBDOMAIN
+  APEX
+}
+
+enum SslStatus {
+  PENDING
+  ACTIVE
+  EXPIRED
+  FAILED
+  RENEWING
+}
+
+enum CdnStatus {
+  PENDING
+  ACTIVE
+  FAILED
+  DISABLED
+}
+
+enum SetupStep {
+  DNS_PENDING
+  DNS_VERIFYING
+  SSL_PENDING
+  CDN_SETUP
+  COMPLETED
+  FAILED
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  EDITOR
+  VIEWER
+}
+
+enum PageType {
+  BLOG
+  HELP_DOC
+  HELPDESK
+  CHANGELOG
+  KNOWLEDGE_BASE
+  FAQ
+}
+
+enum PageStatus {
+  DRAFT
+  PUBLISHED
+  SCHEDULED
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum Difficulty {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
+
+enum ChangeType {
+  FEATURE
+  BUGFIX
+  IMPROVEMENT
+  BREAKING
+  DEPRECATED
+}
+
+// Add PostStatus enum
+enum PostStatus {
+  DRAFT
+  PUBLISHED
+  SCHEDULED
+  ARCHIVED
+  DELETED
+}
+
+// NEW MODELS
+model Category {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String
+  description String?
+  color       String?
+  icon        String?
+  order       Int      @default(0)
+  workspaceId String
+  pageId      String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id])
+  page      Page      @relation(fields: [pageId], references: [id])
+
+  blogPosts BlogPost[] @relation("PostCategories")
+
+  @@unique([name, pageId])
+}
+
+model Tag {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String
+  description String?
+  color       String?
+  workspaceId String
+  pageId      String
+  isPublic    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id])
+  page      Page      @relation(fields: [pageId], references: [id])
+
+  blogPosts BlogPost[] @relation("PostTags")
+
+  @@unique([name, pageId])
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  EXPIRED
+}
+
+enum NotificationType {
+  TEAM_INVITATION
+  TEAM_INVITATION_ACCEPTED
+  TEAM_INVITATION_DECLINED
+  TEAM_MEMBER_ADDED
+  TEAM_MEMBER_REMOVED
+  TEAM_ROLE_CHANGED
+  WORKSPACE_CREATED
+  GENERAL
+}
+
+// Add this model
+model FormSubmission {
+  id          String  @id @default(cuid())
+  formId      String // Form identifier from JSON config
+  pageId      String
+  postId      String?
+  workspaceId String
+
+  // Submission data
+  data     Json // Form data
+  metadata Json? // Browser info, etc.
+
+  // Status
+  status       SubmissionStatus @default(PENDING)
+  processedAt  DateTime?
+  errorMessage String?
+
+  // Relations
+  page      Page      @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  blogPost  BlogPost? @relation(fields: [postId], references: [id], onDelete: SetNull)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([formId, pageId, createdAt])
+  @@index([pageId, status])
+  @@index([workspaceId, createdAt])
+}
+
+// Add this enum
+enum SubmissionStatus {
+  PENDING
+  PROCESSED
+  FAILED
+  SPAM
+}
