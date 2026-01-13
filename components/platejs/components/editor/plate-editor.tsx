@@ -82,6 +82,9 @@ export function PlateEditor({
       console.log('File selected:', file);
     }
   };
+  // Track if this is the first render to skip initial onValueChange from Plate
+  const isFirstRender = React.useRef(true);
+
   const initvalue = [
     {
       children: [{ text: '' }],
@@ -95,7 +98,12 @@ export function PlateEditor({
           <Plate
             editor={editor}
             onValueChange={(newValue) => {
-              console.log('Plate onValueChange triggered with value:', newValue); // Debug log
+              // Skip the initial onValueChange that fires on mount
+              if (isFirstRender.current) {
+                isFirstRender.current = false;
+                return;
+              }
+
               if (newValue.value) {
                 onChange?.(newValue.value as any);
               }

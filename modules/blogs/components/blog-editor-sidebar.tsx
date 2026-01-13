@@ -448,7 +448,10 @@ export function BlogEditorSidebar({
             type="date"
             value={
               post.publishDate
-                ? post.publishDate.toISOString().split('T')[0]
+                ? (post.publishDate instanceof Date
+                  ? post.publishDate
+                  : new Date(post.publishDate)
+                ).toISOString().split('T')[0]
                 : ''
             }
             onChange={handlePublishDateChange}
@@ -635,8 +638,8 @@ export function BlogEditorSidebar({
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === tab.id
-                  ? 'border-primary text-foreground bg-background'
-                  : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/30'
+                ? 'border-primary text-foreground bg-background'
+                : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/30'
                 }`}
             >
               {tab.label}

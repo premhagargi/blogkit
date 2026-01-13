@@ -17,7 +17,7 @@ async function findPageBySlugPath(slugPath: string[]): Promise<{
   // Try to match the slug path to a Page slug
   // Page slugs are like "/blog/demo" or "/blog"
   // So we need to check if the path matches a Page slug
-  
+
   // Build possible slug paths to check
   const possiblePaths: string[] = [];
   for (let i = 1; i <= slugPath.length; i++) {
@@ -49,14 +49,14 @@ async function findPageBySlugPath(slugPath: string[]): Promise<{
       // If we found a page, check if there's a remaining slug for the post
       const pageSlugParts = path.split('/').filter(Boolean);
       const remainingSlug = slugPath.slice(pageSlugParts.length);
-      
+
       console.log('[Public Route] Found page:', {
         pageId: page.id,
         pageSlug: page.slug,
         path,
         remainingSlug: remainingSlug.length > 0 ? remainingSlug.join('/') : undefined,
       });
-      
+
       return {
         page,
         postSlug: remainingSlug.length > 0 ? remainingSlug.join('/') : undefined,
@@ -212,7 +212,7 @@ export default async function PublicBlogPostPage({ params }: PageProps) {
             {/* Header */}
             <header className="mb-8">
               <h1 className="text-4xl font-bold mb-4">{blogPost.title}</h1>
-              
+
               {blogPost.excerpt && (
                 <p className="text-xl text-gray-600 mb-6">{blogPost.excerpt}</p>
               )}

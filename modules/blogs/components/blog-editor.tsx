@@ -85,7 +85,20 @@ export function BlogEditor({
   const [autosaveStatus, setAutosaveStatus] = useState<AutosaveStatus>('idle');
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const autosaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const lastSavedContentRef = useRef<string>('');
+  const hasUserMadeChanges = useRef<boolean>(false); // Track if user has made any changes
+
+  // Initialize lastSavedContentRef with initial post state to prevent autosave on load
+  const lastSavedContentRef = useRef<string>(
+    JSON.stringify({
+      title: initialPost?.title || '',
+      content: initialPost?.content || '',
+      description: initialPost?.description || '',
+      categoryIds: initialPost?.categoryIds || [],
+      tagIds: initialPost?.tagIds || [],
+      authorIds: initialPost?.authorIds || [],
+      featuredImage: initialPost?.featuredImage || '',
+    })
+  );
 
   // Change tracking
   const { hasChanges, revertToInitial, updateInitialState } = usePostChangeTracking({
@@ -182,6 +195,9 @@ export function BlogEditor({
       clearTimeout(autosaveTimeoutRef.current);
     }
 
+    // Don't autosave if user hasn't made any changes yet (prevents autosave on page load)
+    if (!hasUserMadeChanges.current) return;
+
     // Don't autosave if there's nothing to save
     const hasContent = post.title.trim() || post.content || post.description;
     if (!hasContent) return;
@@ -209,6 +225,7 @@ export function BlogEditor({
   }, [autosaveStatus]);
 
   const handlePostChange = (updatedPost: BlogPost) => {
+    hasUserMadeChanges.current = true; // Mark that user has made changes
     setPost(updatedPost);
   };
 
