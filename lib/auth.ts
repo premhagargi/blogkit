@@ -1,19 +1,19 @@
 // @ts-ignore
 // @ts-nocheck
-import NextAuth from 'next-auth';
-import GoogleProvider from 'next-auth/providers/google';
-import GitHubProvider from 'next-auth/providers/github';
-import CredentialsProvider from 'next-auth/providers/credentials';
-import { PrismaAdapter } from '@auth/prisma-adapter';
-import bcrypt from 'bcryptjs';
+import NextAuth from "next-auth";
+import GoogleProvider from "next-auth/providers/google";
+import GitHubProvider from "next-auth/providers/github";
+import CredentialsProvider from "next-auth/providers/credentials";
+import { PrismaAdapter } from "@auth/prisma-adapter";
+import bcrypt from "bcryptjs";
 
-import prisma from '@/lib/db';
-import { sendEmail, generateOTP, createOTPEmailTemplate } from '@/lib/email';
+import prisma from "@/lib/db";
+import { sendEmail, generateOTP, createOTPEmailTemplate } from "@/lib/email";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(prisma),
   session: {
-    strategy: 'jwt',
+    strategy: "jwt",
     maxAge: 30 * 24 * 60 * 60, // 30 days
   },
   providers: [
@@ -21,16 +21,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
     }),
-    GitHubProvider({
-      clientId: process.env.GITHUB_ID!,
-      clientSecret: process.env.GITHUB_SECRET!,
-    }),
     CredentialsProvider({
-      id: 'credentials',
-      name: 'credentials',
+      id: "credentials",
+      name: "credentials",
       credentials: {
-        email: { label: 'Email', type: 'email' },
-        password: { label: 'Password', type: 'password' },
+        email: { label: "Email", type: "email" },
+        password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
@@ -49,7 +45,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         const passwordMatch = await bcrypt.compare(
           credentials.password as string,
-          user.password
+          user.password,
         );
 
         if (!passwordMatch) {
@@ -66,11 +62,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
     // Add OTP Provider
     CredentialsProvider({
-      id: 'otp',
-      name: 'OTP',
+      id: "otp",
+      name: "OTP",
       credentials: {
-        email: { label: 'Email', type: 'email' },
-        otp: { label: 'OTP', type: 'text' },
+        email: { label: "Email", type: "email" },
+        otp: { label: "OTP", type: "text" },
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.otp) {
@@ -82,15 +78,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           const response = await fetch(
             `${process.env.NEXTAUTH_URL}/api/auth/otp/verify`,
             {
-              method: 'POST',
+              method: "POST",
               headers: {
-                'Content-Type': 'application/json',
+                "Content-Type": "application/json",
               },
               body: JSON.stringify({
                 email: credentials.email,
                 otp: credentials.otp,
               }),
-            }
+            },
           );
 
           if (response.ok) {
@@ -98,7 +94,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             return user;
           }
         } catch (error) {
-          console.error('OTP verification error:', error);
+          console.error("OTP verification error:", error);
         }
 
         return null;
@@ -128,13 +124,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       }
 
       // Fallback for other cases
-      if (url.startsWith('/')) return `${baseUrl}${url}`;
+      if (url.startsWith("/")) return `${baseUrl}${url}`;
       if (new URL(url).origin === baseUrl) return url;
       return `${baseUrl}/onboarding`;
     },
   },
   pages: {
-    signIn: '/auth/signin',
+    signIn: "/auth/signin",
   },
 });
 
@@ -150,7 +146,7 @@ export async function getUserRedirectPath(userId: string): Promise<string> {
         },
       },
       orderBy: {
-        updatedAt: 'desc',
+        updatedAt: "desc",
       },
       take: 1,
     });
@@ -159,9 +155,9 @@ export async function getUserRedirectPath(userId: string): Promise<string> {
       return `/${userWorkspaces[0].slug}`;
     }
 
-    return '/onboarding';
+    return "/onboarding";
   } catch (error) {
-    console.error('Error getting redirect path:', error);
-    return '/onboarding';
+    console.error("Error getting redirect path:", error);
+    return "/onboarding";
   }
 }

@@ -4,10 +4,13 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
-    "build": "next build",
+    "build": "next build --turbopack",
     "start": "next start",
     "lint": "next lint",
-    "postinstall": "prisma generate"
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:studio": "prisma studio",
+    "postinstall": "pnpm run db:generate"
   },
   "dependencies": {
     "@ai-sdk/openai": "^1.3.23",
@@ -101,7 +104,7 @@
     "lowlight": "^3.3.0",
     "lucide-react": "^0.532.0",
     "motion": "^12.23.12",
-    "next": "15.4.8",
+    "next": "15.5.12",
     "next-auth": "^5.0.0-beta.29",
     "next-themes": "^0.4.6",
     "nodemailer": "^7.0.6",
@@ -145,7 +148,7 @@
     "@types/react-dom": "^19",
     "@types/react-google-recaptcha": "^2.1.9",
     "eslint": "^9",
-    "eslint-config-next": "15.4.4",
+    "eslint-config-next": "15.5.12",
     "prisma": "^6.14.0",
     "tailwindcss": "^4",
     "tw-animate-css": "^1.3.6",
