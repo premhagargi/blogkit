@@ -25,7 +25,7 @@ export default function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
     ...section,
     items: section.items.map((item) => ({
       ...item,
-      url: item.url.startsWith("/settings")
+      url: item.url.startsWith("/settings") || item.url.startsWith("/sites")
         ? `/${workspaceSlug}${item.url}`
         : item.url,
     })),

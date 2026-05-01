@@ -38,7 +38,11 @@ export default function RootLayout({
             <BrandProvider>
               <HeaderProvider>
                 <FooterProvider>
-                  <SessionProvider>{children}</SessionProvider>
+                  <SessionProvider   
+                  refetchOnWindowFocus={false}
+                  refetchInterval={0}>
+                    {children}
+                  </SessionProvider>
                 </FooterProvider>
               </HeaderProvider>
             </BrandProvider>

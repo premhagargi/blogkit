@@ -18,6 +18,7 @@ import {
   Globe,
   Puzzle,
   Command,
+  GitBranch,
 } from 'lucide-react';
 
 
@@ -26,6 +27,7 @@ export const workspaceSidebarData = [
     id: 'main',
     items: [
       { title: 'Pages', url: '#', icon: Layers },
+      { title: 'Sites', url: '/sites', icon: GitBranch },
       { title: 'Widgets', url: '#', icon: Home },
       { title: 'Templates', url: '#', icon: LayoutTemplate },
     ],
