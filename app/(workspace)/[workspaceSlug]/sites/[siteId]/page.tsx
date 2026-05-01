@@ -11,9 +11,9 @@ import Link from 'next/link';
 interface Site {
   id: string;
   name: string;
-  repoUrl: string;
-  branch: string;
-  deploymentMode: string;
+  repoFullName: string;
+  defaultBranch: string;
+  gitProvider: string;
   pageDrafts: Array<{
     id: string;
     path: string;
@@ -22,6 +22,7 @@ interface Site {
   deployments: Array<{
     id: string;
     status: string;
+    url: string | null;
     createdAt: string;
   }>;
   gitConnection: {
@@ -36,6 +37,8 @@ export default function SiteDashboardPage() {
 
   const [site, setSite] = useState<Site | null>(null);
   const [loading, setLoading] = useState(true);
+  const [committing, setCommitting] = useState(false);
+  const [deploying, setDeploying] = useState(false);
 
   useEffect(() => {
     fetchSite();
@@ -52,6 +55,46 @@ export default function SiteDashboardPage() {
       console.error('Error fetching site:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCommit = async () => {
+    setCommitting(true);
+    try {
+      const response = await fetch(`/api/sites/${siteId}/commit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: 'Update pages' }),
+      });
+      if (response.ok) {
+        // Refresh site data
+        await fetchSite();
+      } else {
+        alert('Failed to commit changes');
+      }
+    } catch (error) {
+      alert('Network error');
+    } finally {
+      setCommitting(false);
+    }
+  };
+
+  const handleDeploy = async () => {
+    setDeploying(true);
+    try {
+      const response = await fetch(`/api/sites/${siteId}/deploy`, {
+        method: 'POST',
+      });
+      if (response.ok) {
+        // Refresh site data
+        await fetchSite();
+      } else {
+        alert('Failed to deploy');
+      }
+    } catch (error) {
+      alert('Network error');
+    } finally {
+      setDeploying(false);
     }
   };
 
@@ -77,7 +120,7 @@ export default function SiteDashboardPage() {
         <div>
           <h1 className="text-3xl font-bold">{site.name}</h1>
           <p className="text-muted-foreground">
-            {site.gitConnection.provider} • {site.repoUrl}
+            {site.gitConnection.provider} • {site.repoFullName}
           </p>
         </div>
         <div className="flex gap-2">
@@ -165,6 +208,13 @@ export default function SiteDashboardPage() {
                         {new Date(deployment.createdAt).toLocaleDateString()}
                       </span>
                     </div>
+                    {deployment.url && (
+                      <Button variant="ghost" size="sm" asChild>
+                        <a href={deployment.url} target="_blank" rel="noopener noreferrer">
+                          <ExternalLink className="w-4 h-4" />
+                        </a>
+                      </Button>
+                    )}
                   </div>
                 ))
               )}
@@ -182,15 +232,18 @@ export default function SiteDashboardPage() {
         </CardHeader>
         <CardContent>
           <div className="flex gap-2 flex-wrap">
-            <Button>
-              <Plus className="w-4 h-4 mr-2" />
-              New Page
+            <Button variant="outline" onClick={handleCommit} disabled={committing}>
+              {committing && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Commit Changes
             </Button>
-            <Button variant="outline">
+            <Button onClick={handleDeploy} disabled={deploying}>
+              {deploying && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               Deploy Now
             </Button>
-            <Button variant="outline">
-              View Repository
+            <Button variant="outline" asChild>
+              <a href={`https://github.com/${site?.repoFullName}`} target="_blank" rel="noopener noreferrer">
+                View Repository
+              </a>
             </Button>
           </div>
         </CardContent>

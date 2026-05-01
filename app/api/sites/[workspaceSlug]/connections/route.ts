@@ -75,11 +75,11 @@ export async function POST(request: NextRequest, { params }: { params: { workspa
       return NextResponse.json({ error: 'Workspace not found' }, { status: 404 });
     }
 
-    const { provider, code } = await request.json();
+    const { provider, code, token } = await request.json();
 
-    if (!provider || !code) {
+    if (!provider || (!code && !token)) {
       return NextResponse.json(
-        { error: 'provider and code are required' },
+        { error: 'provider and either code or token are required' },
         { status: 400 }
       );
     }
@@ -98,8 +98,8 @@ export async function POST(request: NextRequest, { params }: { params: { workspa
       return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
 
-    // Exchange code for token
-    const tokenData = await exchangeCodeForToken(provider, code);
+    // Get token data
+    const tokenData = token ? await getTokenData(provider, token, true) : await getTokenData(provider, code, false);
 
     // Test the token
     const gitClient = new GitClient(provider, tokenData.access_token);
@@ -157,39 +157,45 @@ export async function POST(request: NextRequest, { params }: { params: { workspa
   }
 }
 
-async function exchangeCodeForToken(provider: string, code: string) {
+async function getTokenData(provider: string, codeOrToken: string, isToken = false) {
   const clientId = process.env[`${provider.toUpperCase()}_CLIENT_ID`];
   const clientSecret = process.env[`${provider.toUpperCase()}_CLIENT_SECRET`];
 
-  if (!clientId || !clientSecret) {
-    throw new Error(`Missing ${provider} OAuth credentials`);
-  }
+  let access_token = codeOrToken;
 
-  const tokenUrl = provider === 'github'
-    ? 'https://github.com/login/oauth/access_token'
-    : 'https://gitlab.com/oauth/token';
+  if (!isToken) {
+    if (!clientId || !clientSecret) {
+      throw new Error(`Missing ${provider} OAuth credentials`);
+    }
 
-  const response = await fetch(tokenUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      'Accept': 'application/json',
-    },
-    body: new URLSearchParams({
-      client_id: clientId,
-      client_secret: clientSecret,
-      code,
-    }),
-  });
+    const tokenUrl = provider === 'github'
+      ? 'https://github.com/login/oauth/access_token'
+      : 'https://gitlab.com/oauth/token';
 
-  if (!response.ok) {
-    throw new Error(`Token exchange failed: ${response.status}`);
-  }
+    const response = await fetch(tokenUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'application/json',
+      },
+      body: new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        code: codeOrToken,
+      }),
+    });
 
-  const data = await response.json();
+    if (!response.ok) {
+      throw new Error(`Token exchange failed: ${response.status}`);
+    }
 
-  if (data.error) {
-    throw new Error(`OAuth error: ${data.error_description || data.error}`);
+    const data = await response.json();
+
+    if (data.error) {
+      throw new Error(`OAuth error: ${data.error_description || data.error}`);
+    }
+
+    access_token = data.access_token;
   }
 
   // Get user info to get providerId
@@ -199,7 +205,7 @@ async function exchangeCodeForToken(provider: string, code: string) {
 
   const userResponse = await fetch(userUrl, {
     headers: {
-      'Authorization': `Bearer ${data.access_token}`,
+      'Authorization': `Bearer ${access_token}`,
       'User-Agent': 'BlogKit-Sites',
     },
   });
@@ -211,9 +217,9 @@ async function exchangeCodeForToken(provider: string, code: string) {
   const userData = await userResponse.json();
 
   return {
-    access_token: data.access_token,
-    refresh_token: data.refresh_token,
-    expires_at: data.expires_at,
+    access_token,
+    refresh_token: isToken ? null : data?.refresh_token,
+    expires_at: isToken ? null : data?.expires_at,
     providerId: userData.id.toString(),
   };
 }

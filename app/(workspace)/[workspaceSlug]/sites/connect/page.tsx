@@ -1,11 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Github, GitBranch, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { useSession, signIn } from 'next-auth/react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
@@ -20,12 +21,15 @@ interface Repo {
   fullName: string;
   name: string;
   defaultBranch: string;
+  id: string;
 }
 
 export default function ConnectSitePage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const workspaceSlug = params.workspaceSlug as string;
+  const { data: session } = useSession();
 
   const [connections, setConnections] = useState<GitConnection[]>([]);
   const [repos, setRepos] = useState<Repo[]>([]);
@@ -39,6 +43,13 @@ export default function ConnectSitePage() {
   useEffect(() => {
     fetchConnections();
   }, []);
+
+  useEffect(() => {
+    const oauth = searchParams.get('oauth');
+    if (oauth && (session as any)?.accessToken) {
+      handleOAuthCallback(oauth, (session as any).accessToken);
+    }
+  }, [searchParams, session]);
 
   const fetchConnections = async () => {
     try {
@@ -57,15 +68,36 @@ export default function ConnectSitePage() {
     }
   };
 
+  const handleOAuthCallback = async (provider: string, token: string) => {
+    try {
+      const response = await fetch(`/api/sites/${workspaceSlug}/connections`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider: provider.toUpperCase(), token }),
+      });
+
+      if (response.ok) {
+        // Refresh connections and go back to select-repo
+        await fetchConnections();
+        setStep('select-repo');
+        // Clean URL
+        router.replace(`/${workspaceSlug}/sites/connect`);
+      } else {
+        const error = await response.json();
+        alert(error.error || 'Failed to connect');
+      }
+    } catch (error) {
+      console.error('Error connecting:', error);
+      alert('Failed to connect');
+    }
+  };
+
   const handleGitHubConnect = () => {
-    // This would typically redirect to OAuth
-    // For now, just show a placeholder
-    alert('GitHub OAuth would be initiated here');
+    signIn('github', { callbackUrl: `${window.location.href}?oauth=github` });
   };
 
   const handleGitLabConnect = () => {
-    // This would typically redirect to OAuth
-    alert('GitLab OAuth would be initiated here');
+    signIn('gitlab', { callbackUrl: `${window.location.href}?oauth=gitlab` });
   };
 
   const fetchRepos = async (connectionId: string) => {
@@ -218,7 +250,7 @@ export default function ConnectSitePage() {
                       <div className="text-left">
                         <div className="font-medium">{repo.fullName}</div>
                         <div className="text-xs text-muted-foreground">
-                          {repo.private ? 'Private' : 'Public'} • {repo.defaultBranch}
+                          {repo.defaultBranch}
                         </div>
                       </div>
                     </div>

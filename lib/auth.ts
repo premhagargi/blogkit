@@ -112,10 +112,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, account }) {
       // Add user ID to token when user signs in
       if (user) {
         token.id = user.id;
+      }
+      // Add access token for OAuth providers
+      if (account) {
+        token.accessToken = account.access_token;
+        token.refreshToken = account.refresh_token;
       }
       return token;
     },
@@ -123,6 +128,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       // Add user ID to session from token
       if (token) {
         session.user.id = token.id as string;
+        (session as any).accessToken = token.accessToken;
       }
       return session;
     },
