@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
-import { FileText, GitBranch, Settings, ExternalLink, Plus } from 'lucide-react';
+import { FileText, GitBranch, Settings, ExternalLink, Plus, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -41,22 +41,22 @@ export default function SiteDashboardPage() {
   const [deploying, setDeploying] = useState(false);
 
   useEffect(() => {
+    const fetchSite = async () => {
+      try {
+        const response = await fetch(`/api/sites/${siteId}`);
+        if (response.ok) {
+          const data = await response.json();
+          setSite(data.site);
+        }
+      } catch (error) {
+        console.error('Error fetching site:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
     fetchSite();
   }, [siteId]);
-
-  const fetchSite = async () => {
-    try {
-      const response = await fetch(`/api/sites/${siteId}`);
-      if (response.ok) {
-        const data = await response.json();
-        setSite(data.site);
-      }
-    } catch (error) {
-      console.error('Error fetching site:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleCommit = async () => {
     setCommitting(true);

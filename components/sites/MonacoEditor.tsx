@@ -83,7 +83,7 @@ export default function MonacoEditor({
         monacoRef.current.dispose();
       }
     };
-  }, []);
+  }, [value, language, onChange, readOnly]);
 
   useEffect(() => {
     if (monacoRef.current && value !== monacoRef.current.getValue()) {

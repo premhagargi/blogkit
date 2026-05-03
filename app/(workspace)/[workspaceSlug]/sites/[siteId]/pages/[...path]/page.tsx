@@ -21,25 +21,25 @@ export default function PageEditorPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchPageContent();
-  }, [path]);
-
-  const fetchPageContent = async () => {
-    try {
-      const response = await fetch(`/api/sites/${siteId}/pages?path=${encodeURIComponent(path)}`);
-      if (response.ok) {
-        const data = await response.json();
-        setContent(data.content);
-        setOriginalContent(data.content);
-      } else {
-        setError('Failed to load page content');
+    const fetchPageContent = async () => {
+      try {
+        const response = await fetch(`/api/sites/${siteId}/pages?path=${encodeURIComponent(path)}`);
+        if (response.ok) {
+          const data = await response.json();
+          setContent(data.content);
+          setOriginalContent(data.content);
+        } else {
+          setError('Failed to load page content');
+        }
+      } catch (err) {
+        setError('Network error');
+      } finally {
+        setLoading(false);
       }
-    } catch (err) {
-      setError('Network error');
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
+
+    fetchPageContent();
+  }, [path, siteId]);
 
   const handleSave = async () => {
     if (content === originalContent) return;

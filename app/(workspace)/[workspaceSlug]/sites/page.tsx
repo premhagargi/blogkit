@@ -37,25 +37,25 @@ export default function SitesPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchSites();
-  }, []);
-
-  const fetchSites = async () => {
-    try {
-      const response = await fetch(
-        `/api/sites/${workspaceSlug}/sites`
-      );
-      if (response.ok) {
-        const data = await response.json();
-        setSites(data.sites);
+    const fetchSites = async () => {
+      try {
+        const response = await fetch(
+          `/api/sites/${workspaceSlug}/sites`
+        );
+        if (response.ok) {
+          const data = await response.json();
+          setSites(data.sites);
+        }
+      } catch (error) {
+        console.error('Error fetching sites:', error);
+        setError('Failed to load sites');
+      } finally {
+        setLoading(false);
       }
-    } catch (error) {
-      console.error('Error fetching sites:', error);
-      setError('Failed to load sites');
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
+
+    fetchSites();
+  }, [workspaceSlug]);
 
   if (loading) {
     return (

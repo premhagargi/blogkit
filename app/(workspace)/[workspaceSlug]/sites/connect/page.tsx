@@ -41,56 +41,72 @@ export default function ConnectSitePage() {
   const [step, setStep] = useState<'connect' | 'select-repo' | 'configure'>('connect');
 
   useEffect(() => {
+    const fetchConnections = async () => {
+      try {
+        const response = await fetch(`/api/sites/${workspaceSlug}/connections`);
+        if (response.ok) {
+          const data = await response.json();
+          setConnections(data.connections);
+          if (data.connections.length === 0) {
+            setStep('connect');
+          } else {
+            setStep('select-repo');
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching connections:', error);
+      }
+    };
+
     fetchConnections();
-  }, []);
+  }, [workspaceSlug]);
 
   useEffect(() => {
     const oauth = searchParams.get('oauth');
     if (oauth && (session as any)?.accessToken) {
+      const handleOAuthCallback = async (provider: string, token: string) => {
+        try {
+          const response = await fetch(`/api/sites/${workspaceSlug}/connections`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ provider: provider.toUpperCase(), token }),
+          });
+
+          if (response.ok) {
+            // Refresh connections and go back to select-repo
+            const fetchConnections = async () => {
+              try {
+                const response = await fetch(`/api/sites/${workspaceSlug}/connections`);
+                if (response.ok) {
+                  const data = await response.json();
+                  setConnections(data.connections);
+                  if (data.connections.length === 0) {
+                    setStep('connect');
+                  } else {
+                    setStep('select-repo');
+                  }
+                }
+              } catch (error) {
+                console.error('Error fetching connections:', error);
+              }
+            };
+            await fetchConnections();
+            setStep('select-repo');
+            // Clean URL
+            router.replace(`/${workspaceSlug}/sites/connect`);
+          } else {
+            const error = await response.json();
+            alert(error.error || 'Failed to connect');
+          }
+        } catch (error) {
+          console.error('Error connecting:', error);
+          alert('Failed to connect');
+        }
+      };
+
       handleOAuthCallback(oauth, (session as any).accessToken);
     }
-  }, [searchParams, session]);
-
-  const fetchConnections = async () => {
-    try {
-      const response = await fetch(`/api/sites/${workspaceSlug}/connections`);
-      if (response.ok) {
-        const data = await response.json();
-        setConnections(data.connections);
-        if (data.connections.length === 0) {
-          setStep('connect');
-        } else {
-          setStep('select-repo');
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching connections:', error);
-    }
-  };
-
-  const handleOAuthCallback = async (provider: string, token: string) => {
-    try {
-      const response = await fetch(`/api/sites/${workspaceSlug}/connections`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ provider: provider.toUpperCase(), token }),
-      });
-
-      if (response.ok) {
-        // Refresh connections and go back to select-repo
-        await fetchConnections();
-        setStep('select-repo');
-        // Clean URL
-        router.replace(`/${workspaceSlug}/sites/connect`);
-      } else {
-        const error = await response.json();
-        alert(error.error || 'Failed to connect');
-      }
-    } catch (error) {
-      console.error('Error connecting:', error);
-      alert('Failed to connect');
-    }
-  };
+  }, [searchParams, session, workspaceSlug, router]);
 
   const handleGitHubConnect = () => {
     signIn('github', { callbackUrl: `${window.location.href}?oauth=github` });
