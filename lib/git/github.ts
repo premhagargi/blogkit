@@ -33,10 +33,60 @@ export class GitHubClient {
     }));
   }
 
-  async listFiles(owner: string, repo: string, path = '', branch?: string): Promise<GitFile[]> {
+  async getFileInfo(owner: string, repo: string, path: string, branch?: string): Promise<{ sha: string }> {
     const query = branch ? `?ref=${branch}` : '';
     const data = await this.request(`/repos/${owner}/${repo}/contents/${path}${query}`);
-    return Array.isArray(data) ? data.map(this.mapFile) : [this.mapFile(data)];
+    return { sha: data.sha };
+  }
+
+  async listFiles(owner: string, repo: string, path = '', branch?: string): Promise<GitFile[]> {
+    // Fetch entire git tree recursively
+    const branchName = branch || 'main';
+    const data = await this.request(`/repos/${owner}/${repo}/git/trees/${branchName}?recursive=1`);
+
+    const items = data.tree || [];
+
+    // Filter by path prefix if specified
+    let filtered = items.filter((item: any) => item.type === 'blob' || item.type === 'tree');
+
+    if (path) {
+      const prefix = path.endsWith('/') ? path : path + '/';
+      filtered = filtered.filter((item: any) => item.path.startsWith(prefix));
+    }
+
+    return filtered.map((item: any) => ({
+      name: item.path.split('/').pop() || item.path,
+      path: item.path,
+      type: item.type === 'blob' ? 'file' : 'dir',
+      size: item.size,
+      sha: item.sha,
+      url: '',
+    }));
+  }
+
+  async listFiles(owner: string, repo: string, path = '', branch?: string): Promise<GitFile[]> {
+    // Fetch entire git tree recursively
+    const branchName = branch || 'main';
+    const data = await this.request(`/repos/${owner}/${repo}/git/trees/${branchName}?recursive=1`);
+
+    const items = data.tree || [];
+
+    // Filter by path prefix if specified
+    let filtered = items.filter((item: any) => item.type === 'blob' || item.type === 'tree');
+
+    if (path) {
+      const prefix = path.endsWith('/') ? path : path + '/';
+      filtered = filtered.filter((item: any) => item.path.startsWith(prefix));
+    }
+
+    return filtered.map((item: any) => ({
+      name: item.path.split('/').pop() || item.path,
+      path: item.path,
+      type: item.type === 'blob' ? 'file' : 'dir',
+      size: item.size,
+      sha: item.sha,
+      url: '',
+    }));
   }
 
   async readFile(owner: string, repo: string, path: string, branch?: string): Promise<string> {
@@ -81,6 +131,7 @@ export class GitHubClient {
 
     return {
       sha: data.commit.sha,
+      blobSha: data.content.sha,
       message: data.commit.message,
       author: {
         name: data.commit.author.name,

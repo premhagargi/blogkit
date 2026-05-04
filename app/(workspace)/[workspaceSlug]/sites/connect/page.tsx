@@ -61,52 +61,58 @@ export default function ConnectSitePage() {
     fetchConnections();
   }, [workspaceSlug]);
 
-  useEffect(() => {
-    const oauth = searchParams.get('oauth');
-    if (oauth && (session as any)?.accessToken) {
-      const handleOAuthCallback = async (provider: string, token: string) => {
-        try {
-          const response = await fetch(`/api/workspaces/${workspaceSlug}/sites/connections`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ provider: provider.toUpperCase(), token }),
-          });
+   useEffect(() => {
+     const oauth = searchParams.get('oauth');
+     if (oauth && (session as any)?.accessToken) {
+       const handleOAuthCallback = async (provider: string, token: string) => {
+         try {
+           const response = await fetch(`/api/workspaces/${workspaceSlug}/sites/connections`, {
+             method: 'POST',
+             headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify({ provider: provider.toUpperCase(), token }),
+           });
 
-          if (response.ok) {
-            // Refresh connections and go back to select-repo
-            const fetchConnections = async () => {
-              try {
-                const response = await fetch(`/api/workspaces/${workspaceSlug}/sites/connections`);
-                if (response.ok) {
-                  const data = await response.json();
-                  setConnections(data.connections);
-                  if (data.connections.length === 0) {
-                    setStep('connect');
-                  } else {
-                    setStep('select-repo');
-                  }
-                }
-              } catch (error) {
-                console.error('Error fetching connections:', error);
-              }
-            };
-            await fetchConnections();
-            setStep('select-repo');
-            // Clean URL
-            router.replace(`/${workspaceSlug}/sites/connect`);
-          } else {
-            const error = await response.json();
-            alert(error.error || 'Failed to connect');
-          }
-        } catch (error) {
-          console.error('Error connecting:', error);
-          alert('Failed to connect');
-        }
-      };
+           if (response.ok) {
+             const data = await response.json();
+             
+             // Refresh connections list after connection is created
+             const connectionsRes = await fetch(`/api/workspaces/${workspaceSlug}/sites/connections`);
+             let connectionsList: any[] = [];
+             if (connectionsRes.ok) {
+               const connectionsData = await connectionsRes.json();
+               connectionsList = connectionsData.connections;
+               setConnections(connectionsList);
+             }
+             
+             // Use repos returned from POST (already fetched by server)
+             if (data.repos && data.repos.length > 0) {
+               setRepos(data.repos);
+               // Auto-select first repo and connection
+               setSelectedRepo(data.repos[0].fullName);
+               if (connectionsList.length > 0) {
+                 setSelectedConnection(connectionsList[0].id);
+               }
+               // Move to repository selection/configuration step
+               setStep('configure');
+             } else {
+               alert('No repositories found in this account');
+               setStep('select-repo');
+             }
+             // Clean URL
+             router.replace(`/${workspaceSlug}/sites/connect`);
+           } else {
+             const error = await response.json();
+             alert(error.error || 'Failed to connect');
+           }
+         } catch (error) {
+           console.error('Error connecting:', error);
+           alert('Failed to connect');
+         }
+       };
 
-      handleOAuthCallback(oauth, (session as any).accessToken);
-    }
-  }, [searchParams, session, workspaceSlug, router]);
+       handleOAuthCallback(oauth, (session as any).accessToken);
+     }
+   }, [searchParams, session, workspaceSlug, router]);
 
   const handleGitHubConnect = () => {
     signIn('github', { callbackUrl: `${window.location.href}?oauth=github` });
@@ -132,25 +138,26 @@ export default function ConnectSitePage() {
     }
   };
 
-  const handleCreateSite = async () => {
-    if (!selectedConnection || !selectedRepo || !cfAccountId || !cfApiToken) return;
+   const handleCreateSite = async () => {
+     if (!selectedConnection || !selectedRepo || !cfAccountId || !cfApiToken) return;
 
-    setLoading(true);
-    try {
-      const repo = repos.find(r => r.fullName === selectedRepo);
-      if (!repo) return;
+     setLoading(true);
+     try {
+       const repo = repos.find(r => r.fullName === selectedRepo);
+       if (!repo) return;
 
-      const response = await fetch(`/api/workspaces/${workspaceSlug}/sites`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: repo.name,
-          repoFullName: repo.fullName,
-          gitConnectionId: selectedConnection,
-          cloudflareAccountId: cfAccountId,
-          cloudflareApiToken: cfApiToken,
-        }),
-      });
+       const response = await fetch(`/api/workspaces/${workspaceSlug}/sites`, {
+         method: 'POST',
+         headers: { 'Content-Type': 'application/json' },
+         body: JSON.stringify({
+           name: repo.name,
+           repoFullName: repo.fullName,
+           gitConnectionId: selectedConnection,
+           cloudflareAccountId: cfAccountId,
+           cloudflareApiToken: cfApiToken,
+           defaultBranch: repo.defaultBranch,
+         }),
+       });
 
       if (response.ok) {
         const data = await response.json();

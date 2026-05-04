@@ -7,6 +7,14 @@ export interface DetectedPage {
   type: 'html' | 'markdown' | 'other';
 }
 
+export interface FileTreeNode {
+  name: string;
+  path: string;
+  type: 'file' | 'directory';
+  children?: FileTreeNode[];
+  extension?: string;
+}
+
 export async function detectPages(
   client: GitClient,
   ownerOrId: string,
@@ -53,7 +61,7 @@ export async function detectPages(
 
     // Check common directories
     const dirs = files.filter(f => f.type === 'dir');
-    const commonDirs = ['pages', 'docs', 'content', 'src'];
+    const commonDirs = ['pages', 'docs', 'content', 'src', 'public', 'static', 'assets'];
 
     for (const dir of dirs) {
       if (commonDirs.includes(dir.name)) {
@@ -67,7 +75,7 @@ export async function detectPages(
             )
           );
 
-          for (const file of dirContentFiles.slice(0, 10)) { // Limit to 10 files per dir
+          for (const file of dirContentFiles.slice(0, 50)) { // Limit per dir
             pages.push({
               path: file.path,
               title: getTitleFromFilename(file.name),
@@ -75,7 +83,6 @@ export async function detectPages(
             });
           }
         } catch (error) {
-          // Skip directories we can't read
           console.warn(`Could not read directory ${dir.path}:`, error);
         }
       }
@@ -88,9 +95,142 @@ export async function detectPages(
   }
 }
 
+/**
+ * Build a complete file tree for the repository
+ */
+export async function buildFileTree(
+  client: GitClient,
+  ownerOrId: string,
+  repo: string,
+  branch?: string
+): Promise<FileTreeNode[]> {
+  try {
+    const files = await client.listFiles(ownerOrId, repo, '', branch);
+
+    // Filter out common ignore patterns
+    const ignoredPrefixes = [
+      'node_modules/',
+      '.git/',
+      'dist/',
+      'build/',
+      '.next/',
+      '.cache/',
+      'coverage/',
+      '.idea/',
+      '.vscode/',
+      'tmp/',
+      'temp/',
+    ];
+
+    const filteredFiles = files.filter(file => {
+      // Skip dotfiles and dotdirectories (except common ones like .env if needed)
+      const name = file.name || '';
+      if (name.startsWith('.') && name !== '.env' && name !== '.htaccess') {
+        return false;
+      }
+      // Skip ignored prefixes
+      return !ignoredPrefixes.some(prefix => file.path.startsWith(prefix));
+    });
+
+    return buildTreeFromFiles(filteredFiles);
+  } catch (error) {
+    console.error('Error building file tree:', error);
+    return [];
+  }
+}
+
+function buildTreeFromFiles(files: GitFile[]): FileTreeNode[] {
+  const nodes: FileTreeNode[] = [];
+  const dirMap = new Map<string, FileTreeNode>();
+
+  // First pass: create all directory nodes
+  for (const file of files) {
+    const parts = file.path.split('/');
+    let currentPath = '';
+
+    for (let i = 0; i < parts.length - 1; i++) {
+      const dirName = parts[i];
+      currentPath = currentPath ? `${currentPath}/${dirName}` : dirName;
+
+      if (!dirMap.has(currentPath)) {
+        const dirNode: FileTreeNode = {
+          name: dirName,
+          path: currentPath,
+          type: 'directory',
+          children: [],
+        };
+        dirMap.set(currentPath, dirNode);
+      }
+    }
+  }
+
+  // Second pass: add files and link children
+  for (const file of files) {
+    const parts = file.path.split('/');
+    const fileName = parts[parts.length - 1];
+    const fileNode: FileTreeNode = {
+      name: fileName,
+      path: file.path,
+      type: 'file',
+      extension: getFileExtension(fileName),
+    };
+
+    if (parts.length === 1) {
+      // Root level file
+      nodes.push(fileNode);
+    } else {
+      const parentPath = parts.slice(0, -1).join('/');
+      const parentDir = dirMap.get(parentPath);
+      if (parentDir) {
+        parentDir.children!.push(fileNode);
+      }
+    }
+  }
+
+  // Link directories to their parents
+  for (const [path, dirNode] of dirMap) {
+    const lastSlash = path.lastIndexOf('/');
+    if (lastSlash === -1) {
+      // Root level directory
+      nodes.push(dirNode);
+    } else {
+      const parentPath = path.substring(0, lastSlash);
+      const parentDir = dirMap.get(parentPath);
+      if (parentDir) {
+        parentDir.children!.push(dirNode);
+      } else {
+        nodes.push(dirNode);
+      }
+    }
+  }
+
+  // Sort: directories first, then files, alphabetically
+  const sortNodes = (arr: FileTreeNode[]) => {
+    arr.sort((a, b) => {
+      if (a.type !== b.type) {
+        return a.type === 'directory' ? -1 : 1;
+      }
+      return a.name.localeCompare(b.name);
+    });
+    for (const node of arr) {
+      if (node.children) {
+        sortNodes(node.children);
+      }
+    }
+  };
+
+  sortNodes(nodes);
+
+  return nodes;
+}
+
+function getFileExtension(filename: string): string {
+  const ext = filename.split('.').pop()?.toLowerCase() || '';
+  return ext;
+}
+
 function getTitleFromFilename(filename: string): string {
-  // Remove extension and convert to title case
-  const name = filename.replace(/\.(html|htm|md)$/i, '');
+  const name = filename.replace(/\.(html|htm|md|js|css|json)$/i, '');
   return name
     .split(/[-_\s]+/)
     .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())

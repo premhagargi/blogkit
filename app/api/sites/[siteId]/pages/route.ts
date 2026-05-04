@@ -7,7 +7,7 @@ import { detectPages } from '@/lib/git/page-detect';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { siteId: string } }
+  { params }: { params: Promise<{ siteId: string }> }
 ) {
   try {
     const session = await auth();
@@ -15,11 +15,13 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const { siteId } = await params;
+
     const { searchParams } = new URL(request.url);
     const path = searchParams.get('path');
 
     const site = await db.site.findUnique({
-      where: { id: params.siteId },
+      where: { id: siteId },
       include: {
         gitConnection: true,
         pageDrafts: true,
@@ -97,13 +99,15 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { siteId: string } }
+  { params }: { params: Promise<{ siteId: string }> }
 ) {
   try {
     const session = await auth();
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+
+    const { siteId } = await params;
 
     const { path, content } = await request.json();
 
@@ -112,7 +116,7 @@ export async function PUT(
     }
 
     const site = await db.site.findUnique({
-      where: { id: params.siteId },
+      where: { id: siteId },
     });
 
     if (!site) {
@@ -137,7 +141,7 @@ export async function PUT(
     const draft = await db.pageDraft.upsert({
       where: {
         siteId_path: {
-          siteId: params.siteId,
+          siteId: siteId,
           path,
         },
       },
@@ -146,7 +150,7 @@ export async function PUT(
         updatedAt: new Date(),
       },
       create: {
-        siteId: params.siteId,
+        siteId: siteId,
         path,
         content,
         lastSyncedCommitSha: null,

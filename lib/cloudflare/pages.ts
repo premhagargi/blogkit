@@ -110,12 +110,11 @@ export class CloudflarePagesClient {
     const body: any = {
       name,
       source,
-      deployment_configs: {
-        production: {
-          ...buildConfig,
-        },
-      },
     };
+
+    if (buildConfig) {
+      body.build_config = buildConfig;
+    }
 
     return this.request('/projects', {
       method: 'POST',

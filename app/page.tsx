@@ -9,23 +9,10 @@ export default function HomePage() {
   const { data: session, status } = useSession();
   const router = useRouter();
 
-  const handleGetStarted = async () => {
-    if (status === 'loading') return;
-
+  const handleGetStarted = () => {
+    // User is authenticated - redirect to workspace
     if (session?.user?.id) {
-      // User is authenticated - use smart redirect
-      try {
-        const response = await fetch('/api/auth/redirect');
-        if (response.ok) {
-          const { redirectTo } = await response.json();
-          router.push(redirectTo);
-        } else {
-          // Fallback to onboarding if API fails
-          router.push('/onboarding');
-        }
-      } catch (error) {
-        router.push('/onboarding');
-      }
+      router.replace('/onboarding');
     } else {
       // User is not authenticated - redirect to sign in
       router.push('/auth/signin');

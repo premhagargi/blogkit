@@ -7,7 +7,7 @@ import { CloudflarePagesClient } from '@/lib/cloudflare/pages';
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { siteId: string } }
+  { params }: { params: Promise<{ siteId: string }> }
 ) {
   try {
     const session = await auth();
@@ -15,8 +15,10 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const { siteId } = await params;
+
     const site = await db.site.findUnique({
-      where: { id: params.siteId },
+      where: { id: siteId },
       include: {
         gitConnection: true,
         pageDrafts: true,
@@ -55,7 +57,29 @@ export async function POST(
 
     const [owner, repo] = site.repoFullName.split('/');
 
-    // Fetch repo files
+    // Ensure Cloudflare project exists
+    try {
+      await cfClient.getProject(projectName);
+      console.log(`[deploy] Cloudflare project ${projectName} already exists`);
+    } catch (error: any) {
+      const errorMsg = error?.message || '';
+      if (errorMsg.includes('404') || errorMsg.includes('not found')) {
+        console.log(`[deploy] Creating Cloudflare project: ${projectName}`);
+        await cfClient.createProject(projectName, {
+          type: site.gitConnection.provider.toLowerCase() as 'github' | 'gitlab',
+          config: {
+            owner,
+            repo,
+            branch: site.defaultBranch,
+          },
+        });
+        console.log(`[deploy] Cloudflare project created`);
+      } else {
+        throw error;
+      }
+    }
+
+    console.log(`[deploy] Fetching repo files from ${owner}/${repo}@${site.defaultBranch}...`);
     const files = await gitClient.listFiles(owner, repo, '', site.defaultBranch);
     const fileContents: { [path: string]: Buffer } = {};
     const manifest: { [path: string]: string } = {};
@@ -80,8 +104,11 @@ export async function POST(
       }
     }
 
+    console.log(`[deploy] Uploading ${Object.keys(fileContents).length} files to Cloudflare...`);
     // Upload deployment
     const cfDeployment = await cfClient.uploadDeployment(projectName, fileContents, manifest);
+
+    console.log(`[deploy] Deployment created:`, cfDeployment.id, cfDeployment.status, cfDeployment.url);
 
     // Store Deployment record
     const deployment = await db.deployment.create({
@@ -99,7 +126,7 @@ export async function POST(
     // Store failed deployment
     await db.deployment.create({
       data: {
-        siteId: params.siteId,
+        siteId: siteId,
         status: 'FAILED',
         errorMessage: error instanceof Error ? error.message : 'Unknown error',
       },

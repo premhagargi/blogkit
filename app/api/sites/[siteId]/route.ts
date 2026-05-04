@@ -4,7 +4,7 @@ import db from '@/lib/db';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { siteId: string } }
+  { params }: { params: Promise<{ siteId: string }> }
 ) {
   try {
     const session = await auth();
@@ -12,8 +12,10 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const { siteId } = await params;
+
     const site = await db.site.findUnique({
-      where: { id: params.siteId },
+      where: { id: siteId },
       include: {
         gitConnection: {
           select: {
@@ -67,7 +69,7 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { siteId: string } }
+  { params }: { params: Promise<{ siteId: string }> }
 ) {
   try {
     const session = await auth();
@@ -75,10 +77,12 @@ export async function PUT(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const { siteId } = await params;
+
     const updates = await request.json();
 
     const site = await db.site.findUnique({
-      where: { id: params.siteId },
+      where: { id: siteId },
     });
 
     if (!site) {
@@ -101,7 +105,7 @@ export async function PUT(
 
     // Update site
     const updatedSite = await db.site.update({
-      where: { id: params.siteId },
+      where: { id: siteId },
       data: {
         ...updates,
         updatedAt: new Date(),
@@ -120,7 +124,7 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { siteId: string } }
+  { params }: { params: Promise<{ siteId: string }> }
 ) {
   try {
     const session = await auth();
@@ -128,8 +132,10 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const { siteId } = await params;
+
     const site = await db.site.findUnique({
-      where: { id: params.siteId },
+      where: { id: siteId },
     });
 
     if (!site) {
@@ -152,7 +158,7 @@ export async function DELETE(
 
     // Delete site (cascade will handle related records)
     await db.site.delete({
-      where: { id: params.siteId },
+      where: { id: siteId },
     });
 
     return NextResponse.json({ success: true });

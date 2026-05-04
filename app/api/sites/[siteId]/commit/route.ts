@@ -6,7 +6,7 @@ import { GitClient } from '@/lib/git';
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { siteId: string } }
+  { params }: { params: Promise<{ siteId: string }> }
 ) {
   try {
     const session = await auth();
@@ -14,10 +14,12 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const { siteId } = await params;
+
     const { message = 'Update pages' } = await request.json();
 
     const site = await db.site.findUnique({
-      where: { id: params.siteId },
+      where: { id: siteId },
       include: {
         gitConnection: true,
         pageDrafts: true,
@@ -52,36 +54,66 @@ export async function POST(
     const commits = [];
 
     for (const draft of site.pageDrafts) {
-      if (draft.content) {
-        // Get current SHA if exists
-        let sha: string | undefined;
+      if (!draft.content) continue;
+
+      // Get the identifier required to update this file
+      let updateId: string | undefined = draft.lastSyncedCommitSha || undefined;
+
+      if (!updateId) {
         try {
-          const currentContent = await gitClient.readFile(owner, repo, draft.path, site.defaultBranch);
-          // If content differs, we need SHA for update
-          // But for simplicity, assume update
-        } catch {
-          // File doesn't exist, create new
+          updateId = await gitClient.getFileUpdateId(owner, repo, draft.path, site.defaultBranch);
+        } catch (error) {
+          console.log(`[commit] File ${draft.path} not in repo yet, will create: ${error}`);
         }
-
-        const commit = await gitClient.commitFile(
-          owner,
-          repo,
-          draft.path,
-          draft.content,
-          message,
-          site.defaultBranch,
-          sha
-        );
-
-        commits.push(commit);
-
-        // Update lastSyncedCommitSha
-        await db.pageDraft.update({
-          where: { id: draft.id },
-          data: { lastSyncedCommitSha: commit.sha },
-        });
       }
+
+      const commit = await gitClient.commitFile(
+        owner,
+        repo,
+        draft.path,
+        draft.content,
+        message,
+        site.defaultBranch,
+        updateId
+      );
+
+      commits.push(commit);
+
+      // Save identifier for next update
+      const nextUpdateId = commit.blobSha || commit.sha;
+      await db.pageDraft.update({
+        where: { id: draft.id },
+        data: { lastSyncedCommitSha: nextUpdateId },
+      });
     }
+
+    console.log(`[commit] Committed ${commits.length} files for site ${siteId}`);
+        } catch (error) {
+          // File doesn't exist in repo yet - will create new
+          console.log(`File ${draft.path} not found in repo, creating new`);
+        }
+      }
+
+    const commit = await gitClient.commitFile(
+      owner,
+      repo,
+      draft.path,
+      draft.content,
+      message,
+      site.defaultBranch,
+      sha
+    );
+
+    commits.push(commit);
+
+    // Update lastSyncedCommitSha with file's blob SHA for future updates
+    await db.pageDraft.update({
+      where: { id: draft.id },
+      data: { lastSyncedCommitSha: commit.blobSha || commit.sha },
+    });
+    }
+
+    console.log(`[commit] Site ${siteId}: processing ${site.pageDrafts.length} drafts, ${commits.length} committed`);
 
     return NextResponse.json({ commits });
   } catch (error) {

@@ -22,20 +22,23 @@ export class GitClient {
     return this.client.listRepos();
   }
 
-  async listFiles(ownerOrId: string, repo: string, path = '', branch?: string): Promise<GitFile[]> {
+  async listFiles(owner: string, repo: string, path = '', branch?: string): Promise<GitFile[]> {
     if (this.client instanceof GitHubClient) {
-      return this.client.listFiles(ownerOrId, repo, path, branch);
+      return this.client.listFiles(owner, repo, path, branch);
     } else {
-      // GitLab uses project ID
-      return this.client.listFiles(ownerOrId, path, branch);
+      // For GitLab, use "owner/repo" as project identifier
+      const projectId = `${owner}/${repo}`;
+      return this.client.listFiles(projectId, path, branch);
     }
   }
 
-  async readFile(ownerOrId: string, repo: string, path: string, branch?: string): Promise<string> {
+  async readFile(owner: string, repo: string, path: string, branch?: string): Promise<string> {
     if (this.client instanceof GitHubClient) {
-      return this.client.readFile(ownerOrId, repo, path, branch);
+      return this.client.readFile(owner, repo, path, branch);
     } else {
-      return this.client.readFile(ownerOrId, path, branch);
+      // For GitLab, use "owner/repo" as project identifier
+      const projectId = `${owner}/${repo}`;
+      return this.client.readFile(projectId, path, branch);
     }
   }
 
@@ -48,7 +51,7 @@ export class GitClient {
   }
 
   async commitFile(
-    ownerOrId: string,
+    owner: string,
     repo: string,
     path: string,
     content: string,
@@ -57,9 +60,11 @@ export class GitClient {
     sha?: string
   ): Promise<GitCommit> {
     if (this.client instanceof GitHubClient) {
-      return this.client.commitFile(ownerOrId, repo, path, content, message, branch, sha);
+      return this.client.commitFile(owner, repo, path, content, message, branch, sha);
     } else {
-      return this.client.commitFile(ownerOrId, path, content, message, branch, sha);
+      // For GitLab, use "owner/repo" as project identifier
+      const projectId = `${owner}/${repo}`;
+      return this.client.commitFile(projectId, path, content, message, branch, sha);
     }
   }
 
@@ -75,6 +80,61 @@ export class GitClient {
       return this.client.openPullRequest(ownerOrId, repo, title, head, base, body);
     } else {
       return this.client.openPullRequest(ownerOrId, title, head, base, body);
+    }
+  }
+
+  /**
+   * Get the identifier needed to update a file.
+   * GitHub: returns blob SHA
+   * GitLab: returns last_commit_id
+   */
+  async getFileUpdateId(owner: string, repo: string, path: string, branch?: string): Promise<string> {
+    if (this.client instanceof GitHubClient) {
+      const info = await this.client.getFileInfo(owner, repo, path, branch);
+      return info.sha;
+    } else {
+      // For GitLab, use "owner/repo" as project identifier
+      const projectId = `${owner}/${repo}`;
+      const info = await (this.client as GitLabClient).getFileInfo(projectId, path, branch);
+      if (!info.last_commit_id) {
+        throw new Error('File not found or missing last_commit_id');
+      }
+      return info.last_commit_id;
+    }
+  }
+      return files[0].sha;
+    } else {
+      // For GitLab, ownerOrId is numeric ID, repo is not used in project path construction in our client
+      const fileInfo = await (this.client as GitLabClient).getFileInfo(ownerOrId, path, branch);
+      if (!fileInfo.last_commit_id) {
+        throw new Error('File not found or missing last_commit_id');
+      }
+      return fileInfo.last_commit_id;
+    }
+  }
+}
+  }
+
+  /**
+   * Get the identifier required to update a file.
+   * - GitHub: returns blob SHA
+   * - GitLab: returns last_commit_id (commit SHA of last change to the file)
+   */
+  async getFileUpdateId(ownerOrId: string, repo: string, path: string, branch?: string): Promise<string> {
+    if (this.client instanceof GitHubClient) {
+      const files = await this.client.listFiles(ownerOrId, repo, path, branch);
+      if (files.length === 0) {
+        throw new Error('File not found');
+      }
+      return files[0].sha;
+    } else {
+      // GitLab: combine ownerOrId and repo into full project path
+      const projectId = `${ownerOrId}/${repo}`;
+      const fileInfo = await (this.client as GitLabClient).getFileInfo(projectId, path, branch);
+      if (!fileInfo.last_commit_id) {
+        throw new Error('File not found or missing last_commit_id');
+      }
+      return fileInfo.last_commit_id;
     }
   }
 }

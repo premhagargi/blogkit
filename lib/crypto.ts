@@ -42,15 +42,17 @@ export function decrypt(encryptedText: string): string {
   return decrypted;
 }
 
-function getEncryptionKey(): string {
-  const key = process.env.ENCRYPTION_KEY;
-  if (!key) {
+function getEncryptionKey(): Buffer {
+  const keyHex = process.env.ENCRYPTION_KEY;
+  if (!keyHex) {
     throw new Error('ENCRYPTION_KEY environment variable is required');
   }
 
-  // Ensure key is the right length
+  // Convert hex string to Buffer (32 bytes)
+  const key = Buffer.from(keyHex, 'hex');
+
   if (key.length !== KEY_LENGTH) {
-    throw new Error(`ENCRYPTION_KEY must be ${KEY_LENGTH} bytes long`);
+    throw new Error(`ENCRYPTION_KEY must be ${KEY_LENGTH} bytes long (got ${key.length})`);
   }
 
   return key;

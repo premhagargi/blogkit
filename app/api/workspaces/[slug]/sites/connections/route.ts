@@ -4,14 +4,14 @@ import { encrypt } from '@/lib/crypto';
 import db from '@/lib/db';
 import { GitClient } from '@/lib/git';
 
-export async function GET(request: NextRequest, { params }: { params: { slug: string } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   try {
     const session = await auth();
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { slug } = params;
+    const { slug } = await params;
 
     const workspace = await db.workspace.findUnique({
       where: { slug },
@@ -54,15 +54,16 @@ export async function GET(request: NextRequest, { params }: { params: { slug: st
   }
 }
 
-export async function POST(request: NextRequest, { params }: { params: { slug: string } }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   try {
     const session = await auth();
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { slug } = params;
+    const { slug } = await params;
 
+    // Find workspace
     const workspace = await db.workspace.findUnique({
       where: { slug },
     });
@@ -71,15 +72,7 @@ export async function POST(request: NextRequest, { params }: { params: { slug: s
       return NextResponse.json({ error: 'Workspace not found' }, { status: 404 });
     }
 
-    const { provider, code, token } = await request.json();
-
-    if (!provider || (!code && !token)) {
-      return NextResponse.json(
-        { error: 'provider and either code or token are required' },
-        { status: 400 }
-      );
-    }
-
+    // Check workspace membership
     const member = await db.workspaceMember.findUnique({
       where: {
         userId_workspaceId: {
@@ -93,10 +86,26 @@ export async function POST(request: NextRequest, { params }: { params: { slug: s
       return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
 
+    const { provider, code, token } = await request.json();
+
+    console.log('[POST /connections] received:', { 
+      provider, 
+      hasCode: !!code, 
+      hasToken: !!token, 
+      tokenPrefix: token ? token.substring(0, 10) : 'none',
+      session: !!session 
+    });
+
     const tokenData = token ? await getTokenData(provider, token, true) : await getTokenData(provider, code, false);
 
-    const gitClient = new GitClient(provider, tokenData.access_token);
+    console.log('[POST /connections] tokenData received:', { hasAccessToken: !!tokenData.access_token, providerId: tokenData.providerId });
+
+    const gitClient = new GitClient(provider.toLowerCase(), tokenData.access_token);
+
+    console.log('[POST /connections] listing repos...');
     const repos = await gitClient.listRepos();
+
+    console.log('[POST /connections] repos found:', repos.length, repos.map(r => r.fullName).slice(0, 5));
 
     if (repos.length === 0) {
       return NextResponse.json(
@@ -105,7 +114,9 @@ export async function POST(request: NextRequest, { params }: { params: { slug: s
       );
     }
 
+    console.log('[POST /connections] encrypting access token...');
     const encryptedToken = encrypt(tokenData.access_token);
+    console.log('[POST /connections] encryption successful, length:', encryptedToken.length);
 
     const connection = await db.gitConnection.upsert({
       where: {
@@ -132,12 +143,23 @@ export async function POST(request: NextRequest, { params }: { params: { slug: s
       },
     });
 
+    console.log('[POST /connections] connection saved:', { id: connection.id, provider: connection.provider });
+
+    // Return connection + formatted repos for immediate UI update
+    const formattedRepos = repos.map(repo => ({
+      fullName: repo.fullName,
+      name: repo.name,
+      defaultBranch: repo.defaultBranch,
+      id: repo.fullName, // Use fullName as ID for selection
+    }));
+
     return NextResponse.json({
       connection: {
         id: connection.id,
         provider: connection.provider,
         providerId: connection.providerId,
       },
+      repos: formattedRepos,
     });
   } catch (error) {
     console.error('Error creating connection:', error);
@@ -151,6 +173,9 @@ export async function POST(request: NextRequest, { params }: { params: { slug: s
 async function getTokenData(provider: string, codeOrToken: string, isToken = false) {
   const clientId = process.env[`${provider.toUpperCase()}_CLIENT_ID`];
   const clientSecret = process.env[`${provider.toUpperCase()}_CLIENT_SECRET`];
+  const providerLower = provider.toLowerCase();
+
+  console.log('[getTokenData] provider:', providerLower, 'isToken:', isToken, 'clientIdPresent:', !!clientId);
 
   let access_token = codeOrToken;
   let data: any = null;
@@ -160,9 +185,11 @@ async function getTokenData(provider: string, codeOrToken: string, isToken = fal
       throw new Error(`Missing ${provider} OAuth credentials`);
     }
 
-    const tokenUrl = provider === 'github'
+    const tokenUrl = providerLower === 'github'
       ? 'https://github.com/login/oauth/access_token'
       : 'https://gitlab.com/oauth/token';
+
+    console.log('[getTokenData] exchanging code at:', tokenUrl);
 
     const response = await fetch(tokenUrl, {
       method: 'POST',
@@ -178,31 +205,49 @@ async function getTokenData(provider: string, codeOrToken: string, isToken = fal
     });
 
     if (!response.ok) {
+      const errorText = await response.text();
+      console.error('[getTokenData] Token exchange failed:', {
+        status: response.status,
+        body: errorText,
+      });
       throw new Error(`Token exchange failed: ${response.status}`);
     }
 
     data = await response.json();
 
     if (data.error) {
+      console.error('[getTokenData] OAuth error:', data);
       throw new Error(`OAuth error: ${data.error_description || data.error}`);
     }
 
     access_token = data.access_token;
+    console.log('[getTokenData] token exchange success, token prefix:', access_token?.substring(0, 10));
+  } else {
+    console.log('[getTokenData] using provided token directly');
   }
 
-  const userUrl = provider === 'github'
+  const userUrl = providerLower === 'github'
     ? 'https://api.github.com/user'
     : 'https://gitlab.com/api/v4/user';
+
+  console.log('[getTokenData] fetching user from:', userUrl, 'token prefix:', access_token?.substring(0, 10));
 
   const userResponse = await fetch(userUrl, {
     headers: {
       'Authorization': `Bearer ${access_token}`,
       'User-Agent': 'BlogKit-Sites',
+      'Accept': 'application/json',
     },
   });
 
   if (!userResponse.ok) {
-    throw new Error('Failed to get user info');
+    const errorText = await userResponse.text();
+    console.error('[getTokenData] User fetch failed:', {
+      status: userResponse.status,
+      statusText: userResponse.statusText,
+      body: errorText,
+    });
+    throw new Error(`Failed to get user info: ${userResponse.status} ${userResponse.statusText}`);
   }
 
   const userData = await userResponse.json();

@@ -26,6 +26,7 @@ export interface GitBranch {
 
 export interface GitCommit {
   sha: string;
+  blobSha?: string; // File blob SHA (for updates)
   message: string;
   author: {
     name: string;

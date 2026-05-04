@@ -18,6 +18,44 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     maxAge: 30 * 24 * 60 * 60, // 30 days
     updateAge: 24 * 60 * 60, // 24 hours - reduce session update frequency
   },
+  cookies: {
+    sessionToken: {
+      name: `next-auth.session-token`,
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: process.env.NODE_ENV === "production",
+      },
+    },
+    pkceCodeVerifier: {
+      name: `next-auth.pkce.code_verifier`,
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: process.env.NODE_ENV === "production",
+      },
+    },
+    callbackUrl: {
+      name: `next-auth.callback-url`,
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: process.env.NODE_ENV === "production",
+      },
+    },
+    csrfToken: {
+      name: `next-auth.csrf-token`,
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: process.env.NODE_ENV === "production",
+      },
+    },
+  },
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,
@@ -26,6 +64,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     GitHubProvider({
       clientId: process.env.GITHUB_CLIENT_ID!,
       clientSecret: process.env.GITHUB_CLIENT_SECRET!,
+      authorization: {
+        params: {
+          scope: 'read:user repo',
+        },
+      },
     }),
     GitLabProvider({
       clientId: process.env.GITLAB_CLIENT_ID!,
@@ -119,8 +162,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       }
       // Add access token for OAuth providers
       if (account) {
+        console.log('[auth.jwt] account.provider:', account.provider, 'accessToken prefix:', account.access_token?.substring(0, 10));
         token.accessToken = account.access_token;
         token.refreshToken = account.refresh_token;
+        token.provider = account.provider;
       }
       return token;
     },
@@ -129,7 +174,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (token) {
         session.user.id = token.id as string;
         (session as any).accessToken = token.accessToken;
+        (session as any).provider = token.provider;
       }
+      console.log('[auth.session] session - has accessToken:', !!token?.accessToken, 'provider:', token?.provider);
       return session;
     },
     async redirect({ url, baseUrl, token }) {

@@ -33,6 +33,43 @@ export class GitLabClient {
   }
 
   async listFiles(projectId: string, path = '', branch?: string): Promise<GitFile[]> {
+    // Use recursive tree API to get all files at once
+    const queryParams = new URLSearchParams();
+    if (branch) {
+      queryParams.set('ref', branch);
+    }
+    queryParams.set('recursive', '1');
+    const query = queryParams.toString();
+    const data = await this.request(`/projects/${projectId}/repository/tree${query ? '?' + query : ''}`);
+    
+    // The GitLab tree API returns flat list
+    const items = Array.isArray(data) ? data : [];
+    
+    // Filter by path prefix if specified
+    let filtered = items.filter((item: any) => item.type === 'blob' || item.type === 'tree');
+    
+    if (path) {
+      const prefix = path.endsWith('/') ? path : path + '/';
+      filtered = filtered.filter((item: any) => item.path.startsWith(prefix));
+    }
+
+    return filtered.map((item: any) => ({
+      name: item.path.split('/').pop() || item.path,
+      path: item.path,
+      type: item.type === 'blob' ? 'file' : 'dir',
+      size: item.size,
+      sha: item.id,
+      url: item.url || '',
+    }));
+  }
+
+  async getFileInfo(projectId: string, path: string, branch?: string): Promise<{ last_commit_id: string }> {
+    const query = branch ? `?ref=${branch}` : '';
+    const data = await this.request(`/projects/${projectId}/repository/files/${encodeURIComponent(path)}${query}`);
+    return { last_commit_id: data.last_commit_id };
+  }
+
+  async listFiles(projectId: string, path = '', branch?: string): Promise<GitFile[]> {
     const query = branch ? `?ref=${branch}` : '';
     const data = await this.request(`/projects/${projectId}/repository/tree${query}&path=${encodeURIComponent(path)}&per_page=100`);
     return data.map((item: any) => ({
@@ -75,17 +112,19 @@ export class GitLabClient {
       content: content,
     }];
 
+    const body: any = {
+      branch,
+      commit_message: message,
+      actions,
+    };
+
     if (lastCommitId) {
-      actions[0].previous_path = path; // For updates
+      body.last_commit_id = lastCommitId;
     }
 
     const data = await this.request(`/projects/${projectId}/repository/commits`, {
       method: 'POST',
-      body: JSON.stringify({
-        branch,
-        commit_message: message,
-        actions,
-      }),
+      body: JSON.stringify(body),
     });
 
     return {

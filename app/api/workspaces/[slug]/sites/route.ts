@@ -5,14 +5,14 @@ import { GitClient } from '@/lib/git';
 import { detectPages } from '@/lib/git/page-detect';
 import { decrypt, encrypt } from '@/lib/crypto';
 
-export async function GET(request: NextRequest, { params }: { params: { slug: string } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   try {
     const session = await auth();
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { slug } = params;
+    const { slug } = await params;
 
     const workspace = await db.workspace.findUnique({
       where: { slug },
@@ -64,14 +64,14 @@ export async function GET(request: NextRequest, { params }: { params: { slug: st
   }
 }
 
-export async function POST(request: NextRequest, { params }: { params: { slug: string } }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   try {
     const session = await auth();
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { slug } = params;
+    const { slug } = await params;
 
     const workspace = await db.workspace.findUnique({
       where: { slug },
@@ -87,9 +87,10 @@ export async function POST(request: NextRequest, { params }: { params: { slug: s
       gitConnectionId,
       cloudflareAccountId,
       cloudflareApiToken,
+      defaultBranch,
     } = await request.json();
 
-    if (!name || !repoFullName || !gitConnectionId || !cloudflareAccountId || !cloudflareApiToken) {
+    if (!name || !repoFullName || !gitConnectionId || !cloudflareAccountId || !cloudflareApiToken || !defaultBranch) {
       return NextResponse.json(
         { error: 'name, repoFullName, gitConnectionId, cloudflareAccountId, and cloudflareApiToken are required' },
         { status: 400 }
@@ -118,16 +119,13 @@ export async function POST(request: NextRequest, { params }: { params: { slug: s
     }
 
     const [owner, repo] = repoFullName.split('/');
-    if (!owner || !repo) {
-      return NextResponse.json({ error: 'Invalid repoFullName format' }, { status: 400 });
-    }
 
     const gitClient = new GitClient(
       connection.provider.toLowerCase() as 'github' | 'gitlab',
       decrypt(connection.accessToken)
     );
 
-    const pages = await detectPages(gitClient, owner, repo);
+    const pages = await detectPages(gitClient, owner, repo, defaultBranch);
 
     const site = await db.site.create({
       data: {
@@ -135,13 +133,15 @@ export async function POST(request: NextRequest, { params }: { params: { slug: s
         workspaceId: workspace.id,
         repoFullName,
         repoId: `${owner}/${repo}`,
-        defaultBranch: 'main',
+        defaultBranch,
         gitProvider: connection.provider,
         cloudflareAccountId: encrypt(cloudflareAccountId),
         cloudflareApiToken: encrypt(cloudflareApiToken),
         gitConnectionId,
       },
     });
+
+    console.log(`[site/create] Created site ${site.id} for repo ${repoFullName} on branch ${defaultBranch}`);
 
     if (pages.length > 0) {
       await db.pageDraft.createMany({
@@ -152,6 +152,9 @@ export async function POST(request: NextRequest, { params }: { params: { slug: s
           siteId: site.id,
         })),
       });
+      console.log(`[site/create] Created ${pages.length} page drafts`);
+    } else {
+      console.log(`[site/create] No pages detected in repository`);
     }
 
     return NextResponse.json({

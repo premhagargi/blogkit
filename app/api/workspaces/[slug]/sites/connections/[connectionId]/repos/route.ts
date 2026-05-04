@@ -6,7 +6,7 @@ import { GitClient } from '@/lib/git';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { slug: string; connectionId: string } }
+  { params }: { params: Promise<{ slug: string; connectionId: string }> }
 ) {
   try {
     const session = await auth();
@@ -14,7 +14,7 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { slug, connectionId } = params;
+    const { slug, connectionId } = await params;
 
     const workspace = await db.workspace.findUnique({
       where: { slug },
