@@ -4,25 +4,23 @@ import { encrypt } from '@/lib/crypto';
 import db from '@/lib/db';
 import { GitClient } from '@/lib/git';
 
-export async function GET(request: NextRequest, { params }: { params: { workspaceSlug: string } }) {
+export async function GET(request: NextRequest, { params }: { params: { slug: string } }) {
   try {
     const session = await auth();
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { workspaceSlug } = params;
+    const { slug } = params;
 
-    // Find workspace by slug
     const workspace = await db.workspace.findUnique({
-      where: { slug: workspaceSlug },
+      where: { slug },
     });
 
     if (!workspace) {
       return NextResponse.json({ error: 'Workspace not found' }, { status: 404 });
     }
 
-    // Check if user has access to workspace
     const member = await db.workspaceMember.findUnique({
       where: {
         userId_workspaceId: {
@@ -36,7 +34,6 @@ export async function GET(request: NextRequest, { params }: { params: { workspac
       return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
 
-    // Get all connections for this workspace
     const connections = await db.gitConnection.findMany({
       where: { workspaceId: workspace.id },
       select: {
@@ -57,18 +54,17 @@ export async function GET(request: NextRequest, { params }: { params: { workspac
   }
 }
 
-export async function POST(request: NextRequest, { params }: { params: { workspaceSlug: string } }) {
+export async function POST(request: NextRequest, { params }: { params: { slug: string } }) {
   try {
     const session = await auth();
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { workspaceSlug } = params;
+    const { slug } = params;
 
-    // Find workspace by slug
     const workspace = await db.workspace.findUnique({
-      where: { slug: workspaceSlug },
+      where: { slug },
     });
 
     if (!workspace) {
@@ -84,7 +80,6 @@ export async function POST(request: NextRequest, { params }: { params: { workspa
       );
     }
 
-    // Check workspace access
     const member = await db.workspaceMember.findUnique({
       where: {
         userId_workspaceId: {
@@ -98,10 +93,8 @@ export async function POST(request: NextRequest, { params }: { params: { workspa
       return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
 
-    // Get token data
     const tokenData = token ? await getTokenData(provider, token, true) : await getTokenData(provider, code, false);
 
-    // Test the token
     const gitClient = new GitClient(provider, tokenData.access_token);
     const repos = await gitClient.listRepos();
 
@@ -112,10 +105,8 @@ export async function POST(request: NextRequest, { params }: { params: { workspa
       );
     }
 
-    // Encrypt the token
     const encryptedToken = encrypt(tokenData.access_token);
 
-    // Create or update connection
     const connection = await db.gitConnection.upsert({
       where: {
         provider_providerId_workspaceId: {
@@ -162,6 +153,7 @@ async function getTokenData(provider: string, codeOrToken: string, isToken = fal
   const clientSecret = process.env[`${provider.toUpperCase()}_CLIENT_SECRET`];
 
   let access_token = codeOrToken;
+  let data: any = null;
 
   if (!isToken) {
     if (!clientId || !clientSecret) {
@@ -189,7 +181,7 @@ async function getTokenData(provider: string, codeOrToken: string, isToken = fal
       throw new Error(`Token exchange failed: ${response.status}`);
     }
 
-    const data = await response.json();
+    data = await response.json();
 
     if (data.error) {
       throw new Error(`OAuth error: ${data.error_description || data.error}`);
@@ -198,7 +190,6 @@ async function getTokenData(provider: string, codeOrToken: string, isToken = fal
     access_token = data.access_token;
   }
 
-  // Get user info to get providerId
   const userUrl = provider === 'github'
     ? 'https://api.github.com/user'
     : 'https://gitlab.com/api/v4/user';

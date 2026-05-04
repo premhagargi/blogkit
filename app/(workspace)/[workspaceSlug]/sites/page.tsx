@@ -40,7 +40,7 @@ export default function SitesPage() {
     const fetchSites = async () => {
       try {
         const response = await fetch(
-          `/api/sites/${workspaceSlug}/sites`
+          `/api/workspaces/${workspaceSlug}/sites`
         );
         if (response.ok) {
           const data = await response.json();

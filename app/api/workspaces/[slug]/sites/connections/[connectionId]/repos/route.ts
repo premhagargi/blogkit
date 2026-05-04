@@ -6,7 +6,7 @@ import { GitClient } from '@/lib/git';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { workspaceSlug: string; connectionId: string } }
+  { params }: { params: { slug: string; connectionId: string } }
 ) {
   try {
     const session = await auth();
@@ -14,18 +14,16 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { workspaceSlug, connectionId } = params;
+    const { slug, connectionId } = params;
 
-    // Find workspace by slug
     const workspace = await db.workspace.findUnique({
-      where: { slug: workspaceSlug },
+      where: { slug },
     });
 
     if (!workspace) {
       return NextResponse.json({ error: 'Workspace not found' }, { status: 404 });
     }
 
-    // Check workspace access
     const member = await db.workspaceMember.findUnique({
       where: {
         userId_workspaceId: {
@@ -39,7 +37,6 @@ export async function GET(
       return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
 
-    // Get git connection
     const connection = await db.gitConnection.findUnique({
       where: { id: connectionId },
     });
@@ -48,7 +45,6 @@ export async function GET(
       return NextResponse.json({ error: 'Invalid git connection' }, { status: 400 });
     }
 
-    // Fetch repos using stored token
     const gitClient = new GitClient(
       connection.provider.toLowerCase() as 'github' | 'gitlab',
       decrypt(connection.accessToken)
@@ -56,7 +52,6 @@ export async function GET(
 
     const repos = await gitClient.listRepos();
 
-    // Return repo name + default branch
     const formattedRepos = repos.map(repo => ({
       fullName: repo.full_name,
       name: repo.name,

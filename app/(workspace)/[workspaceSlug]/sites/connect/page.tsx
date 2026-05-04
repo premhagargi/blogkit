@@ -43,7 +43,7 @@ export default function ConnectSitePage() {
   useEffect(() => {
     const fetchConnections = async () => {
       try {
-        const response = await fetch(`/api/sites/${workspaceSlug}/connections`);
+        const response = await fetch(`/api/workspaces/${workspaceSlug}/sites/connections`);
         if (response.ok) {
           const data = await response.json();
           setConnections(data.connections);
@@ -66,7 +66,7 @@ export default function ConnectSitePage() {
     if (oauth && (session as any)?.accessToken) {
       const handleOAuthCallback = async (provider: string, token: string) => {
         try {
-          const response = await fetch(`/api/sites/${workspaceSlug}/connections`, {
+          const response = await fetch(`/api/workspaces/${workspaceSlug}/sites/connections`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ provider: provider.toUpperCase(), token }),
@@ -76,7 +76,7 @@ export default function ConnectSitePage() {
             // Refresh connections and go back to select-repo
             const fetchConnections = async () => {
               try {
-                const response = await fetch(`/api/sites/${workspaceSlug}/connections`);
+                const response = await fetch(`/api/workspaces/${workspaceSlug}/sites/connections`);
                 if (response.ok) {
                   const data = await response.json();
                   setConnections(data.connections);
@@ -119,7 +119,7 @@ export default function ConnectSitePage() {
   const fetchRepos = async (connectionId: string) => {
     setLoading(true);
     try {
-      const response = await fetch(`/api/sites/${workspaceSlug}/connections/${connectionId}/repos`);
+      const response = await fetch(`/api/workspaces/${workspaceSlug}/sites/connections/${connectionId}/repos`);
       if (response.ok) {
         const data = await response.json();
         setRepos(data.repos.map((repo: any) => ({ ...repo, id: repo.fullName })));
@@ -140,7 +140,7 @@ export default function ConnectSitePage() {
       const repo = repos.find(r => r.fullName === selectedRepo);
       if (!repo) return;
 
-      const response = await fetch(`/api/sites/${workspaceSlug}/sites`, {
+      const response = await fetch(`/api/workspaces/${workspaceSlug}/sites`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
