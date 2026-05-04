@@ -74,7 +74,7 @@ export default function ConnectSitePage() {
 
            if (response.ok) {
              const data = await response.json();
-             
+
              // Refresh connections list after connection is created
              const connectionsRes = await fetch(`/api/workspaces/${workspaceSlug}/sites/connections`);
              let connectionsList: any[] = [];
@@ -83,20 +83,19 @@ export default function ConnectSitePage() {
                connectionsList = connectionsData.connections;
                setConnections(connectionsList);
              }
-             
+
              // Use repos returned from POST (already fetched by server)
              if (data.repos && data.repos.length > 0) {
                setRepos(data.repos);
-               // Auto-select first repo and connection
-               setSelectedRepo(data.repos[0].fullName);
+               // Auto-select the newly created connection (first one)
                if (connectionsList.length > 0) {
                  setSelectedConnection(connectionsList[0].id);
                }
-               // Move to repository selection/configuration step
-               setStep('configure');
+               // Show repo selection list - user must click a repo to continue
+               setStep('select-repo');
              } else {
                alert('No repositories found in this account');
-               setStep('select-repo');
+               setStep('connect');
              }
              // Clean URL
              router.replace(`/${workspaceSlug}/sites/connect`);
