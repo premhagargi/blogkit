@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   ArrowLeft,
@@ -14,18 +14,11 @@ import {
   ExternalLink,
   FileJson,
   File,
-  ChevronRight,
-  ChevronDown,
-  PanelRightClose,
   PanelRight,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
-
-// Dynamically import Monaco Editor to avoid SSR issues
-const MonacoEditor = lazy(() => import('@monaco-editor/react'));
-import hljs from 'highlight.js';
 
 interface FileTreeNode {
   name: string;
@@ -63,14 +56,10 @@ export default function SiteEditorPage() {
   const [previewKey, setPreviewKey] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [previewOpen, setPreviewOpen] = useState(true);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [previewOpen, setPreviewOpen] = useState(true);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [previewOpen, setPreviewOpen] = useState(true);
 
-  // Editor line numbers state
-  const editorRef = useRef<HTMLTextAreaElement>(null);
-  const lineCount = fileContent.split('\n').length;
+  // Editor refs
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const lineNumbersRef = useRef<HTMLDivElement>(null);
 
   // Fetch file tree on mount
   useEffect(() => {
@@ -80,7 +69,6 @@ export default function SiteEditorPage() {
         if (response.ok) {
           const data = await response.json();
           setFileTree(data.fileTree);
-          // Auto-expand root
           setExpandedDirs(new Set(['/']));
         } else {
           setError('Failed to load file tree');
@@ -129,6 +117,20 @@ export default function SiteEditorPage() {
       return () => clearTimeout(timer);
     }
   }, [fileContent, selectedFilePath]);
+
+  // Sync line numbers scroll with textarea
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    const lineNumbers = lineNumbersRef.current;
+    if (!textarea || !lineNumbers) return;
+
+    const handleScroll = () => {
+      lineNumbers.scrollTop = textarea.scrollTop;
+    };
+
+    textarea.addEventListener('scroll', handleScroll);
+    return () => textarea.removeEventListener('scroll', handleScroll);
+  }, [selectedFilePath]);
 
   const handleSave = async () => {
     if (!selectedFilePath || !hasUnsavedChanges) return;
@@ -218,11 +220,14 @@ export default function SiteEditorPage() {
               onClick={(e) => toggleDir(node.path, e)}
             >
               {node.children && node.children.length > 0 && (
-                <ChevronRight
-                  className={`w-3 h-3 mr-1 text-muted-foreground transition-transform ${
-                    isExpanded ? 'rotate-90' : ''
-                  }`}
-                />
+                <svg
+                  className={`w-3 h-3 mr-1 text-muted-foreground transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
               )}
               {!node.children && <span className="w-3.5 mr-1 inline-block" />}
               <Folder className="w-4 h-4 mr-1.5 text-blue-500 flex-shrink-0" />
@@ -260,7 +265,7 @@ export default function SiteEditorPage() {
     });
   };
 
-  // Get file language for Monaco
+  // Get file language for syntax highlighting
   const getFileLanguage = (path: string) => {
     if (path.endsWith('.html') || path.endsWith('.htm')) return 'html';
     if (path.endsWith('.css')) return 'css';
@@ -280,28 +285,20 @@ export default function SiteEditorPage() {
     return `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">${baseTag}<style>body{margin:0;padding:20px;font-family:system-ui,-apple-system,sans-serif}</style></head><body>${fileContent}</body></html>`;
   };
 
-  // Handle editor changes
-  const handleEditorChange = (value: string | undefined) => {
-    setFileContent(value || '');
+  // Handle textarea changes
+  const handleEditorChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setFileContent(e.target.value);
     setHasUnsavedChanges(true);
   };
 
-  // Monaco editor loader options
-  const editorOptions = {
-    fontSize: 14,
-    fontFamily: '"JetBrains Mono", "Fira Code", "Cascadia Code", Consolas, monospace',
-    lineHeight: 1.6,
-    minimap: { enabled: false },
-    scrollBeyondLastLine: false,
-    automaticLayout: true,
-    tabSize: 2,
-    wordWrap: 'on' as const,
-    lineNumbers: 'on' as const,
-    glyphMargin: false,
-    folding: false,
-    renderLineHighlight: 'line' as const,
-    theme: 'vs-dark' as const,
-  };
+  // Generate line numbers
+  const lineCount = fileContent.split('\n').length;
+  const lineNumbers = Array.from({ length: lineCount }, (_, i) => i + 1);
+
+  // Editor styling constants
+  const editorFontFamily = '"JetBrains Mono", "Fira Code", "Cascadia Code", Consolas, monospace';
+  const editorBgColor = '#1e1e1e';
+  const editorTextColor = '#e5e7eb'; // gray-200
 
   return (
     <div className="h-screen flex flex-col bg-background overflow-hidden">
@@ -407,141 +404,102 @@ export default function SiteEditorPage() {
 
         {/* Editor Panel */}
         <main className="flex-1 flex flex-col min-w-0 bg-background">
-           {/* Editor Toolbar */}
-           <div className="flex-shrink-0 px-3 py-1.5 border-b bg-muted/10 flex items-center justify-between">
-             <div className="flex items-center gap-2">
-               {selectedFilePath && (
-                 <>
-                   <span className="text-sm font-medium truncate max-w-[200px] sm:max-w-md">
-                     {getFileName(selectedFilePath)}
-                   </span>
-                   <Badge variant="outline" className="text-xs h-5 px-2">
-                     {getFileLanguage(selectedFilePath)}
-                   </Badge>
-                 </>
-               )}
-               {!selectedFilePath && (
-                 <span className="text-sm text-muted-foreground">No file selected</span>
-               )}
-             </div>
-             <div className="flex items-center gap-1">
-               {selectedFilePath && (
-                 <Button
-                   variant="ghost"
-                   size="sm"
-                   onClick={() => setPreviewKey(k => k + 1)}
-                   disabled={!selectedFilePath?.endsWith('.html') && !selectedFilePath?.endsWith('.htm')}
-                   className="h-7 px-2 text-xs"
-                 >
-                   <RefreshCw className="w-3 h-3 mr-1" />
-                   <span className="hidden sm:inline">Refresh</span>
-                 </Button>
-               )}
-             </div>
-           </div>
+          {/* Editor Toolbar */}
+          <div className="flex-shrink-0 px-3 py-1.5 border-b bg-muted/10 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              {selectedFilePath && (
+                <>
+                  <span className="text-sm font-medium truncate max-w-[200px] sm:max-w-md">
+                    {getFileName(selectedFilePath)}
+                  </span>
+                  <Badge variant="outline" className="text-xs h-5 px-2">
+                    {getFileLanguage(selectedFilePath)}
+                  </Badge>
+                </>
+              )}
+              {!selectedFilePath && (
+                <span className="text-sm text-muted-foreground">No file selected</span>
+              )}
+            </div>
+            <div className="flex items-center gap-1">
+              {selectedFilePath && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setPreviewKey(k => k + 1)}
+                  disabled={!selectedFilePath?.endsWith('.html') && !selectedFilePath?.endsWith('.htm')}
+                  className="h-7 px-2 text-xs"
+                >
+                  <RefreshCw className="w-3 h-3 mr-1" />
+                  <span className="hidden sm:inline">Refresh</span>
+                </Button>
+              )}
+            </div>
+          </div>
 
-           {/* Monaco Editor */}
-           <div className="flex-1 relative">
-             <Suspense
-               fallback={
-                 <div className="absolute inset-0 flex items-center justify-center bg-[#1e1e1e]">
-                   <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                     <Loader2 className="w-6 h-6 animate-spin" />
-                     <span className="text-sm">Loading editor...</span>
-                   </div>
-                 </div>
-               }
-             >
-               {selectedFilePath && !loading && !error ? (
-                 <MonacoEditor
-                   key={selectedFilePath}
-                   value={fileContent}
-                   onChange={handleEditorChange}
-                   language={getFileLanguage(selectedFilePath)}
-                   options={editorOptions}
-                   className="w-full h-full"
-                 />
-               ) : (
-                 <div className="absolute inset-0 flex items-center justify-center bg-[#1e1e1e] text-muted-foreground">
-                   {loading ? (
-                     <div className="flex flex-col items-center gap-2">
-                       <Loader2 className="w-6 h-6 animate-spin" />
-                       <span className="text-sm">Loading file...</span>
-                     </div>
-                   ) : error ? (
-                     <div className="flex flex-col items-center gap-2 text-red-400 max-w-md text-center px-4">
-                       <span className="text-lg font-semibold">Error</span>
-                       <span className="text-sm">{error}</span>
-                     </div>
-                   ) : (
-                     <div className="flex flex-col items-center">
-                       <FileText className="w-12 h-12 mb-3 opacity-50" />
-                       <p className="text-sm">Select a file from the explorer to begin editing</p>
-                     </div>
-                   )}
-                 </div>
-               )}
-             </Suspense>
-           </div>
-             <div className="flex items-center gap-1">
-               {selectedFilePath && (
-                 <Button
-                   variant="ghost"
-                   size="sm"
-                   onClick={() => setPreviewKey(k => k + 1)}
-                   disabled={!selectedFilePath?.endsWith('.html') && !selectedFilePath?.endsWith('.htm')}
-                   className="h-7 px-2 text-xs"
-                 >
-                   <RefreshCw className="w-3 h-3 mr-1" />
-                   <span className="hidden sm:inline">Refresh</span>
-                 </Button>
-               )}
-             </div>
-           </div>
+          {/* Textarea Editor with Line Numbers */}
+          <div className="flex-1 relative flex overflow-hidden">
+            {selectedFilePath && !loading && !error ? (
+              <>
+                {/* Line Numbers */}
+                <div
+                  ref={lineNumbersRef}
+                  className="flex-shrink-0 select-none text-right pr-4 py-4 text-gray-500 text-sm leading-[1.6] overflow-hidden"
+                  style={{
+                    backgroundColor: editorBgColor,
+                    fontFamily: editorFontFamily,
+                    fontSize: '14px',
+                    lineHeight: '1.6',
+                    minWidth: '50px',
+                    borderRight: '1px solid #2d2d2d',
+                  }}
+                >
+                  {lineNumbers.map(num => (
+                    <div key={num} className="leading-[1.6]">
+                      {num}
+                    </div>
+                  ))}
+                </div>
 
-           {/* Monaco Editor */}
-           <div className="flex-1 relative">
-             <Suspense
-               fallback={
-                 <div className="absolute inset-0 flex items-center justify-center bg-[#1e1e1e]">
-                   <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                     <Loader2 className="w-6 h-6 animate-spin" />
-                     <span className="text-sm">Loading editor...</span>
-                   </div>
-                 </div>
-               }
-             >
-               {selectedFilePath && !loading && !error ? (
-                 <MonacoEditor
-                   key={selectedFilePath}
-                   value={fileContent}
-                   onChange={handleEditorChange}
-                   language={getFileLanguage(selectedFilePath)}
-                   options={editorOptions}
-                   className="w-full h-full"
-                 />
-               ) : (
-                 <div className="absolute inset-0 flex items-center justify-center bg-[#1e1e1e] text-muted-foreground">
-                   {loading ? (
-                     <div className="flex flex-col items-center gap-2">
-                       <Loader2 className="w-6 h-6 animate-spin" />
-                       <span className="text-sm">Loading file...</span>
-                     </div>
-                   ) : error ? (
-                     <div className="flex flex-col items-center gap-2 text-red-400 max-w-md text-center px-4">
-                       <span className="text-lg font-semibold">Error</span>
-                       <span className="text-sm">{error}</span>
-                     </div>
-                   ) : (
-                     <div className="flex flex-col items-center">
-                       <FileText className="w-12 h-12 mb-3 opacity-50" />
-                       <p className="text-sm">Select a file from the explorer to begin editing</p>
-                     </div>
-                   )}
-                 </div>
-               )}
-             </Suspense>
-           </div>
+                {/* Textarea */}
+                <textarea
+                  ref={textareaRef}
+                  value={fileContent}
+                  onChange={handleEditorChange}
+                  className="flex-1 resize-none outline-none leading-[1.6] overflow-auto bg-[#1e1e1e] text-gray-200"
+                  style={{
+                    fontFamily: editorFontFamily,
+                    fontSize: '14px',
+                    lineHeight: '1.6',
+                    tabSize: 2,
+                    padding: '16px 16px 16px 16px',
+                    whiteSpace: 'pre',
+                    wordWrap: 'break-word',
+                  }}
+                  spellCheck={false}
+                />
+              </>
+            ) : (
+              <div className="absolute inset-0 flex items-center justify-center bg-[#1e1e1e] text-muted-foreground">
+                {loading ? (
+                  <div className="flex flex-col items-center gap-2">
+                    <Loader2 className="w-6 h-6 animate-spin" />
+                    <span className="text-sm">Loading file...</span>
+                  </div>
+                ) : error ? (
+                  <div className="flex flex-col items-center gap-2 text-red-400 max-w-md text-center px-4">
+                    <span className="text-lg font-semibold">Error</span>
+                    <span className="text-sm">{error}</span>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center">
+                    <FileText className="w-12 h-12 mb-3 opacity-50" />
+                    <p className="text-sm">Select a file from the explorer to begin editing</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </main>
 
         {/* Preview Panel - Conditionally rendered based on screen size/pref */}
